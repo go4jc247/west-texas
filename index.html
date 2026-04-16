@@ -118,8 +118,8 @@ const TIME_SPEED = 1 / 60; // 1 game-hour per real minute → full day in 24 min
 //         expo(sure), stars, moon, discC(olor), discS(ize), discI(ntensity)
 const SKY_KEYS = [
 // h     skyT      skyM      skyB      hN        hF        fog       fogD    sunC      sunI  ambC      ambI  hkC       hgC       hkI   expo  stars moon  discC     discS  discI
- [0,   0x040710, 0x070B1C, 0x090E1E, 0x0C0E26, 0x050710, 0x07091A, 0.00014, 0x1A2A44, 0.00, 0x151C30, 0.18, 0x070B1E, 0x070914, 0.12, 0.52, 1.0, 1.0, 0x000000, 0.00, 0.0],
- [4.5, 0x08091E, 0x0E1228, 0x181530, 0x161030, 0x080B1C, 0x0E0C20, 0.00014, 0x2233AA, 0.00, 0x181E38, 0.20, 0x0C1226, 0x0A0C1A, 0.15, 0.55, 0.9, 0.8, 0x000000, 0.00, 0.0],
+ [0,   0x030508, 0x050810, 0x060912, 0x080B18, 0x040508, 0x050710, 0.00010, 0x1A2A44, 0.00, 0x0A0E18, 0.04, 0x050810, 0x040608, 0.06, 0.40, 1.0, 1.0, 0x000000, 0.00, 0.0],
+ [4.5, 0x050710, 0x080C18, 0x0A0E20, 0x0D0E22, 0x060810, 0x080A14, 0.00010, 0x1A2A44, 0.00, 0x0C1020, 0.06, 0x08101E, 0x060810, 0.08, 0.42, 0.9, 0.8, 0x000000, 0.00, 0.0],
  [5.5, 0x1A1040, 0x5C2410, 0xBB4820, 0xFF8822, 0x401878, 0x9A5838, 0.00030, 0xFF8844, 0.00, 0xBB5530, 0.28, 0x3A0E58, 0x2E1B38, 0.22, 0.70, 0.4, 0.3, 0xFFAA44, 0.10, 0.0],
  [6.0, 0x281450, 0xCC4A28, 0xFF9955, 0xFFD040, 0x503888, 0xC09060, 0.00035, 0xFF9933, 0.60, 0xFF9966, 0.42, 0x3C1878, 0x4E2E40, 0.32, 0.82, 0.1, 0.05,0xFFBB33, 0.08, 2.2],
  [6.5, 0x1C2E80, 0xDD8840, 0xFFBB77, 0xFFDD88, 0x6688CC, 0xCCA060, 0.00030, 0xFFDD88, 1.20, 0xFFEE99, 0.50, 0x8899CC, 0x9A7844, 0.40, 0.90, 0.0, 0.0, 0xFFEE88, 0.05, 1.6],
@@ -130,9 +130,9 @@ const SKY_KEYS = [
  [17,  0x22105A, 0xB84822, 0xFF8840, 0xFFCC33, 0x3C1860, 0xAA7040, 0.00030, 0xFF9933, 1.40, 0xDD8844, 0.46, 0x703388, 0x584433, 0.36, 0.96, 0.05,0.0, 0xFFAA33, 0.06, 1.8],
  [17.8,0x18082E, 0x992800, 0xFF5010, 0xFFBB20, 0x600840, 0x904020, 0.00035, 0xFF6622, 0.90, 0xCC6622, 0.34, 0x560C80, 0x44282E, 0.26, 0.86, 0.12,0.08,0xFF7722, 0.09, 2.4],
  [18.0,0x120520, 0x4A1400, 0xCC3A00, 0xAA5022, 0x3C0838, 0x6A2818, 0.00030, 0xFF5511, 0.15, 0x883322, 0.22, 0x380C60, 0x301820, 0.20, 0.74, 0.45,0.35,0xFF4400, 0.04, 0.5],
- [19,  0x090418, 0x160A28, 0x280E18, 0x381618, 0x130820, 0x180C18, 0.00020, 0x1A2040, 0.00, 0x2A1830, 0.16, 0x180C30, 0x130C18, 0.14, 0.62, 0.85,0.85,0x000000, 0.00, 0.0],
- [21,  0x050710, 0x080C1C, 0x0A0E1E, 0x0C1026, 0x050710, 0x070918, 0.00014, 0x1A2844, 0.00, 0x141C30, 0.18, 0x070B1E, 0x070914, 0.12, 0.54, 1.0, 1.0, 0x000000, 0.00, 0.0],
- [24,  0x040710, 0x070B1C, 0x090E1E, 0x0C0E26, 0x050710, 0x07091A, 0.00014, 0x1A2A44, 0.00, 0x151C30, 0.18, 0x070B1E, 0x070914, 0.12, 0.52, 1.0, 1.0, 0x000000, 0.00, 0.0],
+ [19,  0x060310, 0x0E081E, 0x180C14, 0x201010, 0x0A0618, 0x100A14, 0.00016, 0x1A2040, 0.00, 0x180E20, 0.08, 0x100A20, 0x0A0A10, 0.08, 0.52, 0.85,0.85,0x000000, 0.00, 0.0],
+ [21,  0x030508, 0x050810, 0x060912, 0x080B18, 0x040508, 0x050710, 0.00010, 0x1A2A44, 0.00, 0x0A0E18, 0.04, 0x050810, 0x040608, 0.06, 0.40, 1.0, 1.0, 0x000000, 0.00, 0.0],
+ [24,  0x030508, 0x050810, 0x060912, 0x080B18, 0x040508, 0x050710, 0.00010, 0x1A2A44, 0.00, 0x0A0E18, 0.04, 0x050810, 0x040608, 0.06, 0.40, 1.0, 1.0, 0x000000, 0.00, 0.0],
 ];
 
 // Column indices for readability
@@ -190,14 +190,29 @@ document.body.appendChild(renderer.domElement);
 // ============================================================
 const ambient = new THREE.AmbientLight(0xFFFFEE, 0.7);
 scene.add(ambient);
+
+// Sun — directional, casts shadows, target follows player
 const sun = new THREE.DirectionalLight(0xFFFFF0, 2.0);
-sun.position.set(100, 500, 50);
+sun.position.set(100, 500, 0);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -100; sun.shadow.camera.right = 100;
-sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100;
-sun.shadow.camera.far = 800;
+sun.shadow.camera.left = -300; sun.shadow.camera.right = 300;
+sun.shadow.camera.top = 300;  sun.shadow.camera.bottom = -300;
+sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 1200;
 scene.add(sun);
+scene.add(sun.target); // target updated each frame to follow player
+
+// Moon — directional, casts soft blue shadows at night, target follows player
+const moonDirLight = new THREE.DirectionalLight(0x99AADD, 0.0);
+moonDirLight.position.set(-100, 500, 0);
+moonDirLight.castShadow = true;
+moonDirLight.shadow.mapSize.set(1024, 1024);
+moonDirLight.shadow.camera.left = -300; moonDirLight.shadow.camera.right = 300;
+moonDirLight.shadow.camera.top = 300;   moonDirLight.shadow.camera.bottom = -300;
+moonDirLight.shadow.camera.near = 0.5;  moonDirLight.shadow.camera.far = 1200;
+scene.add(moonDirLight);
+scene.add(moonDirLight.target);
+
 const hemi = new THREE.HemisphereLight(0x66BBEE, 0xC8A882, 0.5);
 scene.add(hemi);
 
@@ -320,12 +335,18 @@ const moonSpriteMat = new THREE.SpriteMaterial({
   map: window._moonTex, transparent: true, depthWrite: false,
 });
 const moonSprite = new THREE.Sprite(moonSpriteMat);
-moonSprite.scale.set(320, 320, 1);
+moonSprite.scale.set(384, 384, 1); // 20% bigger than before
 scene.add(moonSprite);
 
-// Soft moonlight
-const moonLight = new THREE.PointLight(0x9AAAD8, 0, 12000);
-scene.add(moonLight);
+// White additive glow — makes moon look like a bright white ball when high in sky.
+// Near horizon the glow fades and the texture sprite shows through (craters visible).
+const moonGlowMat = new THREE.SpriteMaterial({
+  color: 0xDDEEFF, transparent: true, opacity: 0,
+  blending: THREE.AdditiveBlending, depthWrite: false,
+});
+const moonGlowSprite = new THREE.Sprite(moonGlowMat);
+moonGlowSprite.scale.set(500, 500, 1);
+scene.add(moonGlowSprite);
 
 // ============================================================
 // GROUND — single huge plane that follows the player.
@@ -539,10 +560,11 @@ function applyContinuousTime(dt) {
   scene.fog.density = lf(lo[KFOGD], hi[KFOGD]);
   scene.background.copy(lc(lo[KSM], hi[KSM]));
 
-  // Sun directional light
+  // Sun directional light — shadows only when sun is meaningfully up
   sun.color.copy(lc(lo[KSUNC], hi[KSUNC]));
   sun.intensity = lf(lo[KSUNI], hi[KSUNI]) * sunFade;
   sun.position.copy(sunPos);
+  sun.castShadow = sunFade > 0.05;
 
   // Ambient + hemi
   ambient.color.copy(lc(lo[KAMBC], hi[KAMBC]));
@@ -579,14 +601,25 @@ function applyContinuousTime(dt) {
     moonDir.y * SKY_DIST,
     player.z + moonDir.z * SKY_DIST
   );
+  moonGlowSprite.position.copy(moonSprite.position);
+
   const moonVis = lf(lo[KMOON], hi[KMOON]) * moonFade;
-  moonSpriteMat.opacity = moonVis;
-  moonLight.intensity = moonVis > 0.1 ? 0.6 : 0;
-  moonLight.position.set(
-    player.x + moonDir.x * 5000,
-    moonDir.y * 5000,
-    player.z + moonDir.z * 5000
+  // Elevation 0=horizon, 1=zenith — drives white-ball vs texture balance
+  const moonElev = THREE.MathUtils.clamp(moonPos.y / 400, 0, 1);
+  // Texture sprite: always present but washed out when high (white ball).
+  // Near horizon the glow backs off and craters become visible.
+  moonSpriteMat.opacity = moonVis * (0.5 + (1 - moonElev) * 0.5);
+  // Glow sprite: additive white — intense when high (ball), soft near horizon
+  moonGlowMat.opacity = moonVis * (0.15 + moonElev * 0.75);
+
+  // Moon directional light: cool blue, casts shadows at night
+  moonDirLight.position.set(
+    player.x + moonDir.x * 800,
+    moonDir.y * 800,
+    player.z + moonDir.z * 800
   );
+  moonDirLight.intensity = moonVis * 0.45;
+  moonDirLight.castShadow = moonVis > 0.15;
 
   // Clock display — 12h format
   const totalMin = Math.round(timeOfDay * 60) % (24 * 60);
@@ -716,6 +749,12 @@ function animate() {
   skyDome.position.set(player.x, 0, player.z);
   starField.position.set(player.x, 0, player.z);
   mountainFollower.position.set(player.x, 0, player.z);
+
+  // Shadow targets follow the player so shadows render around the player's area.
+  sun.target.position.set(player.x, 0, player.z);
+  sun.target.updateMatrixWorld();
+  moonDirLight.target.position.set(player.x, 0, player.z);
+  moonDirLight.target.updateMatrixWorld();
   // Sun + moon sprites are positioned inside applyContinuousTime.
 
   // Ground: follow player in world space, offset UVs so the texture
