@@ -309,31 +309,27 @@ scene.add(sunSprite);
 (function buildMoonSprite() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const ctx = c.getContext('2d');
-  // Clip everything to a circle — guarantees no square border ever appears
-  ctx.save();
-  ctx.beginPath(); ctx.arc(128,128,122,0,Math.PI*2); ctx.clip();
-  // Base disc — radial gradient fades to transparent at rim (no hard edge)
-  const base = ctx.createRadialGradient(128,128,0, 128,128,122);
-  base.addColorStop(0,    'rgba(245,242,225,1)');
-  base.addColorStop(0.80, 'rgba(218,214,190,1)');
-  base.addColorStop(0.94, 'rgba(195,190,165,0.6)');
-  base.addColorStop(1.0,  'rgba(170,165,140,0)');
-  ctx.fillStyle = base; ctx.fillRect(0,0,256,256);
-  // Large maria (dark regions)
-  ctx.globalAlpha = 0.18; ctx.fillStyle = '#707060';
+  // Bright disc — same approach as sun: radial gradient → fillRect.
+  // AdditiveBlending means black = transparent, so corners are naturally invisible.
+  const g = ctx.createRadialGradient(128,128,0, 128,128,128);
+  g.addColorStop(0,    'rgba(250,248,235,1)');  // bright cream white center
+  g.addColorStop(0.42, 'rgba(235,232,210,1)');  // moon body
+  g.addColorStop(0.50, 'rgba(200,198,175,0.9)');// sharp rim start
+  g.addColorStop(0.62, 'rgba(120,118,100,0.3)');// soft halo ring
+  g.addColorStop(1.0,  'rgba(0,0,0,0)');        // black = invisible in additive
+  ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
+  // Maria (dark seas) — multiply darkens the disc pixels
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = '#909080';
   for (const [x,y,r] of [[110,90,38],[150,130,28],[90,145,22],[155,80,18]]) {
     ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
   }
-  // Craters (lighter rims)
-  ctx.globalAlpha = 0.25; ctx.fillStyle = '#E8E4CC';
-  for (const [x,y,r] of [[85,80,14],[155,108,18],[95,145,11],[140,158,9],[170,82,7],[115,115,20]]) {
-    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-  }
-  ctx.restore(); // remove clip
+  ctx.globalCompositeOperation = 'source-over';
   window._moonTex = new THREE.CanvasTexture(c);
 })();
 const moonSpriteMat = new THREE.SpriteMaterial({
   map: window._moonTex, transparent: true, depthWrite: false, depthTest: false,
+  blending: THREE.AdditiveBlending,
 });
 const moonSprite = new THREE.Sprite(moonSpriteMat);
 moonSprite.scale.set(384, 384, 1); // 20% bigger than before
@@ -347,8 +343,8 @@ const moonGlowMat = new THREE.SpriteMaterial({
   blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
 });
 const moonGlowSprite = new THREE.Sprite(moonGlowMat);
-moonGlowSprite.scale.set(500, 500, 1);
-moonGlowSprite.renderOrder = 3; // draw after moon disc
+moonGlowSprite.scale.set(600, 600, 1);
+moonGlowSprite.renderOrder = 1; // draw before moon disc so disc sits on top of halo
 scene.add(moonGlowSprite);
 
 // ============================================================
