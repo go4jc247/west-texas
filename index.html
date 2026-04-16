@@ -154,11 +154,15 @@ function lerpSkyState(hour) {
 // Sun traces an arc across the sky: rises east at 6, zenith at 12, sets west at 18.
 // Full orbit in 24 h so sun is below ground at night.
 function getSunWorldPos(hour) {
-  const angle = (hour - 6) / 24 * Math.PI * 2; // 0 at 6am, PI at 6pm
+  // angle completes one full circle over 24 h.
+  // At h=6 angle=0 (east horizon), h=12 angle=π/2 (zenith), h=18 angle=π (west horizon).
+  // X and Y are cos/sin of a full-circle angle → perfectly periodic, no midnight jump.
+  const angle = (hour - 6) / 24 * Math.PI * 2;
   return new THREE.Vector3(
-    Math.cos(angle) * 500,           // east(+) → west(-)
-    Math.sin(angle) * 500,           // above horizon when >0
-    -Math.sin(angle * 0.4) * 100     // slight south arc at noon
+    Math.cos(angle) * 500,   // east(+) → west(-)
+    Math.sin(angle) * 500,   // positive = above horizon
+    0                        // no Z offset — any non-integer multiplier on angle
+                             // breaks periodicity and causes a midnight jump
   );
 }
 function getMoonWorldPos(hour) { return getSunWorldPos(hour + 12); } // 12h opposite
