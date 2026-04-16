@@ -94,7 +94,7 @@ let WALK_SPEED = 30;
 let RUN_SPEED = 65;
 let TURN_SPEED = 1.8;
 let MOUSE_SENS = 0.002;
-let NIGHT_BRIGHT = 0.40; // ADDITIVE ambient added at night on top of keyframe value (0=dark, 2=bright as day)
+let NIGHT_BRIGHT = 0.50; // ADDITIVE ambient added at night on top of keyframe value (0=dark, no upper limit)
 
 // Returns the shortest signed delta from a to b on a wrap of size W.
 // Result is in [-W/2, W/2].
@@ -120,8 +120,8 @@ const TIME_SPEED = 1 / 60; // 1 game-hour per real minute → full day in 24 min
 //         expo(sure), stars, moon, discC(olor), discS(ize), discI(ntensity)
 const SKY_KEYS = [
 // h     skyT      skyM      skyB      hN        hF        fog       fogD    sunC      sunI  ambC      ambI  hkC       hgC       hkI   expo  stars moon  discC     discS  discI
- [0,   0x030508, 0x050810, 0x060912, 0x080B18, 0x040508, 0x050710, 0.00010, 0x1A2A44, 0.00, 0x0A0E18, 0.04, 0x050810, 0x040608, 0.06, 0.40, 1.0, 1.0, 0x000000, 0.00, 0.0],
- [4.5, 0x050710, 0x080C18, 0x0A0E20, 0x0D0E22, 0x060810, 0x080A14, 0.00010, 0x1A2A44, 0.00, 0x0C1020, 0.06, 0x08101E, 0x060810, 0.08, 0.42, 0.9, 0.8, 0x000000, 0.00, 0.0],
+ [0,   0x0A1428, 0x0F1C35, 0x162240, 0x1C2C4A, 0x08101E, 0x0D1A30, 0.00010, 0xBBCCEE, 0.00, 0x1E304E, 0.22, 0x0F1C35, 0x0A1220, 0.28, 0.78, 1.0, 1.0, 0x000000, 0.00, 0.0],
+ [4.5, 0x0C1A30, 0x122238, 0x182C46, 0x1E3050, 0x0A1424, 0x101E38, 0.00010, 0xBBCCEE, 0.00, 0x20304E, 0.24, 0x12203C, 0x0C1424, 0.30, 0.78, 0.9, 0.8, 0x000000, 0.00, 0.0],
  [5.5, 0x1A1040, 0x5C2410, 0xBB4820, 0xFF8822, 0x401878, 0x9A5838, 0.00030, 0xFF8844, 0.00, 0xBB5530, 0.28, 0x3A0E58, 0x2E1B38, 0.22, 0.70, 0.4, 0.3, 0xFFAA44, 0.10, 0.0],
  [6.0, 0x281450, 0xCC4A28, 0xFF9955, 0xFFD040, 0x503888, 0xC09060, 0.00035, 0xFF9933, 0.60, 0xFF9966, 0.42, 0x3C1878, 0x4E2E40, 0.32, 0.82, 0.1, 0.05,0xFFBB33, 0.08, 2.2],
  [6.5, 0x1C2E80, 0xDD8840, 0xFFBB77, 0xFFDD88, 0x6688CC, 0xCCA060, 0.00030, 0xFFDD88, 1.20, 0xFFEE99, 0.50, 0x8899CC, 0x9A7844, 0.40, 0.90, 0.0, 0.0, 0xFFEE88, 0.05, 1.6],
@@ -132,9 +132,9 @@ const SKY_KEYS = [
  [17,  0x22105A, 0xB84822, 0xFF8840, 0xFFCC33, 0x3C1860, 0xAA7040, 0.00030, 0xFF9933, 1.40, 0xDD8844, 0.46, 0x703388, 0x584433, 0.36, 0.96, 0.05,0.0, 0xFFAA33, 0.06, 1.8],
  [17.8,0x18082E, 0x992800, 0xFF5010, 0xFFBB20, 0x600840, 0x904020, 0.00035, 0xFF6622, 0.90, 0xCC6622, 0.34, 0x560C80, 0x44282E, 0.26, 0.86, 0.12,0.08,0xFF7722, 0.09, 2.4],
  [18.0,0x120520, 0x4A1400, 0xCC3A00, 0xAA5022, 0x3C0838, 0x6A2818, 0.00030, 0xFF5511, 0.15, 0x883322, 0.22, 0x380C60, 0x301820, 0.20, 0.74, 0.45,0.35,0xFF4400, 0.04, 0.5],
- [19,  0x060310, 0x0E081E, 0x180C14, 0x201010, 0x0A0618, 0x100A14, 0.00016, 0x1A2040, 0.00, 0x180E20, 0.08, 0x100A20, 0x0A0A10, 0.08, 0.52, 0.85,0.85,0x000000, 0.00, 0.0],
- [21,  0x030508, 0x050810, 0x060912, 0x080B18, 0x040508, 0x050710, 0.00010, 0x1A2A44, 0.00, 0x0A0E18, 0.04, 0x050810, 0x040608, 0.06, 0.40, 1.0, 1.0, 0x000000, 0.00, 0.0],
- [24,  0x030508, 0x050810, 0x060912, 0x080B18, 0x040508, 0x050710, 0.00010, 0x1A2A44, 0.00, 0x0A0E18, 0.04, 0x050810, 0x040608, 0.06, 0.40, 1.0, 1.0, 0x000000, 0.00, 0.0],
+ [19,  0x08101E, 0x0D1830, 0x121E38, 0x182840, 0x060E1C, 0x0A1428, 0.00012, 0xBBCCEE, 0.00, 0x182840, 0.18, 0x0D1828, 0x08101C, 0.24, 0.72, 0.85,0.85,0x000000, 0.00, 0.0],
+ [21,  0x0A1428, 0x0F1C35, 0x162240, 0x1C2C4A, 0x08101E, 0x0D1A30, 0.00010, 0xBBCCEE, 0.00, 0x1E304E, 0.22, 0x0F1C35, 0x0A1220, 0.28, 0.78, 1.0, 1.0, 0x000000, 0.00, 0.0],
+ [24,  0x0A1428, 0x0F1C35, 0x162240, 0x1C2C4A, 0x08101E, 0x0D1A30, 0.00010, 0xBBCCEE, 0.00, 0x1E304E, 0.22, 0x0F1C35, 0x0A1220, 0.28, 0.78, 1.0, 1.0, 0x000000, 0.00, 0.0],
 ];
 
 // Column indices for readability
@@ -205,7 +205,7 @@ scene.add(sun);
 scene.add(sun.target); // target updated each frame to follow player
 
 // Moon — directional, casts soft blue shadows at night, target follows player
-const moonDirLight = new THREE.DirectionalLight(0x99AADD, 0.0);
+const moonDirLight = new THREE.DirectionalLight(0xBBCCEE, 0.0);
 moonDirLight.position.set(-100, 500, 0);
 moonDirLight.castShadow = true;
 moonDirLight.shadow.mapSize.set(1024, 1024);
@@ -505,7 +505,7 @@ function adjustTweak(kind, dir) {
   if (kind === 'mouse') MOUSE_SENS  = Math.max(0.0002, MOUSE_SENS + dir * 0.0002);
   if (kind === 'walk')  WALK_SPEED  = Math.max(1, WALK_SPEED + dir * 5);
   if (kind === 'run')   RUN_SPEED   = Math.max(1, RUN_SPEED  + dir * 5);
-  if (kind === 'night') NIGHT_BRIGHT = Math.max(0, Math.min(2.0, NIGHT_BRIGHT + dir * 0.1));
+  if (kind === 'night') NIGHT_BRIGHT = Math.max(0, NIGHT_BRIGHT + dir * 0.1);
   refreshTweaks();
 }
 document.querySelectorAll('#tweaks button').forEach(b => {
@@ -630,7 +630,7 @@ function applyContinuousTime(dt) {
     moonDir.y * 800,
     player.z + moonDir.z * 800
   );
-  moonDirLight.intensity = moonVis * 0.45;
+  moonDirLight.intensity = moonVis * 1.2;
   moonDirLight.castShadow = moonVis > 0.15;
 
   // Clock display — 12h format
