@@ -312,11 +312,11 @@ scene.add(sunSprite);
   // Bright disc — same approach as sun: radial gradient → fillRect.
   // AdditiveBlending means black = transparent, so corners are naturally invisible.
   const g = ctx.createRadialGradient(128,128,0, 128,128,128);
-  g.addColorStop(0,    'rgba(250,248,235,1)');  // bright cream white center
-  g.addColorStop(0.42, 'rgba(235,232,210,1)');  // moon body
-  g.addColorStop(0.50, 'rgba(200,198,175,0.9)');// sharp rim start
-  g.addColorStop(0.62, 'rgba(120,118,100,0.3)');// soft halo ring
-  g.addColorStop(1.0,  'rgba(0,0,0,0)');        // black = invisible in additive
+  g.addColorStop(0,    'rgba(255,253,240,1)');  // bright white center
+  g.addColorStop(0.60, 'rgba(238,235,215,1)');  // moon body — wide opaque disc
+  g.addColorStop(0.72, 'rgba(200,198,175,0.7)');// rim fade
+  g.addColorStop(0.85, 'rgba(80,78,65,0.2)');   // soft outer glow
+  g.addColorStop(1.0,  'rgba(0,0,0,0)');        // invisible at corners
   ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
   // Maria (dark seas) — multiply darkens the disc pixels
   ctx.globalCompositeOperation = 'multiply';
@@ -332,7 +332,7 @@ const moonSpriteMat = new THREE.SpriteMaterial({
   blending: THREE.AdditiveBlending,
 });
 const moonSprite = new THREE.Sprite(moonSpriteMat);
-moonSprite.scale.set(384, 384, 1); // 20% bigger than before
+moonSprite.scale.set(700, 700, 1);
 moonSprite.renderOrder = 2;        // draw after stars so moon is always in front
 scene.add(moonSprite);
 
@@ -355,7 +355,7 @@ const moonGlowMat = new THREE.SpriteMaterial({
   blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
 });
 const moonGlowSprite = new THREE.Sprite(moonGlowMat);
-moonGlowSprite.scale.set(600, 600, 1);
+moonGlowSprite.scale.set(1100, 1100, 1);
 moonGlowSprite.renderOrder = 1; // draw before moon disc so disc sits on top of halo
 scene.add(moonGlowSprite);
 
@@ -627,9 +627,8 @@ function applyContinuousTime(dt) {
   const moonElev = THREE.MathUtils.clamp(moonPos.y / 400, 0, 1);
   // Texture sprite: always present but washed out when high (white ball).
   // Near horizon the glow backs off and craters become visible.
-  moonSpriteMat.opacity = moonVis * (0.5 + (1 - moonElev) * 0.5);
-  // Glow sprite: additive white — intense when high (ball), soft near horizon
-  moonGlowMat.opacity = moonVis * (0.15 + moonElev * 0.75);
+  moonSpriteMat.opacity = moonVis;
+  moonGlowMat.opacity = moonVis * 0.85;
 
   // Moon directional light: cool blue, casts shadows at night
   moonDirLight.position.set(
