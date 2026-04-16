@@ -94,7 +94,7 @@ let WALK_SPEED = 30;
 let RUN_SPEED = 65;
 let TURN_SPEED = 1.8;
 let MOUSE_SENS = 0.002;
-let NIGHT_BRIGHT = 3.0; // multiplier applied to ambient when sun is down (1=current keyframes, higher=brighter)
+let NIGHT_BRIGHT = 0.40; // ADDITIVE ambient added at night on top of keyframe value (0=dark, 2=bright as day)
 
 // Returns the shortest signed delta from a to b on a wrap of size W.
 // Result is in [-W/2, W/2].
@@ -498,14 +498,14 @@ function refreshTweaks() {
   document.getElementById('tv-mouse').textContent = MOUSE_SENS.toFixed(4);
   document.getElementById('tv-walk').textContent = WALK_SPEED.toFixed(0);
   document.getElementById('tv-run').textContent = RUN_SPEED.toFixed(0);
-  document.getElementById('tv-night').textContent = NIGHT_BRIGHT.toFixed(1);
+  document.getElementById('tv-night').textContent = NIGHT_BRIGHT.toFixed(2);
 }
 function adjustTweak(kind, dir) {
   if (kind === 'turn')  TURN_SPEED  = Math.max(0.1, TURN_SPEED  + dir * 0.1);
   if (kind === 'mouse') MOUSE_SENS  = Math.max(0.0002, MOUSE_SENS + dir * 0.0002);
   if (kind === 'walk')  WALK_SPEED  = Math.max(1, WALK_SPEED + dir * 5);
   if (kind === 'run')   RUN_SPEED   = Math.max(1, RUN_SPEED  + dir * 5);
-  if (kind === 'night') NIGHT_BRIGHT = Math.max(0.5, Math.min(10, NIGHT_BRIGHT + dir * 0.5));
+  if (kind === 'night') NIGHT_BRIGHT = Math.max(0, Math.min(2.0, NIGHT_BRIGHT + dir * 0.1));
   refreshTweaks();
 }
 document.querySelectorAll('#tweaks button').forEach(b => {
@@ -575,18 +575,18 @@ function applyContinuousTime(dt) {
   sun.position.copy(sunPos);
   sun.castShadow = sunFade > 0.05;
 
-  // Ambient + hemi — NIGHT_BRIGHT boosts both when sun is down
-  // nightFactor=1 at full night, 0 at full day, smooth blend at dusk/dawn
+  // Ambient + hemi — NIGHT_BRIGHT adds directly on top of keyframe values at night.
+  // nightFactor=1 at full night, 0 at full day — smooth blend at dusk/dawn.
+  // Additive formula means 0.1 steps on the slider = noticeable change every time.
   const nightFactor = 1 - THREE.MathUtils.clamp(sunFade * 2, 0, 1);
-  const nightBoost = 1 + nightFactor * (NIGHT_BRIGHT - 1);
   ambient.color.copy(lc(lo[KAMBC], hi[KAMBC]));
-  ambient.intensity = lf(lo[KAMBI], hi[KAMBI]) * nightBoost;
+  ambient.intensity = lf(lo[KAMBI], hi[KAMBI]) + nightFactor * NIGHT_BRIGHT;
   hemi.color.copy(lc(lo[KHKC], hi[KHKC]));
   hemi.groundColor.copy(lc(lo[KHGC], hi[KHGC]));
-  hemi.intensity = lf(lo[KHKI], hi[KHKI]) * nightBoost;
+  hemi.intensity = lf(lo[KHKI], hi[KHKI]) + nightFactor * NIGHT_BRIGHT * 0.6;
 
-  // Exposure
-  renderer.toneMappingExposure = lf(lo[KEXPO], hi[KEXPO]);
+  // Exposure — also pushed up at night by NIGHT_BRIGHT so tone mapping amplifies moon/ambient
+  renderer.toneMappingExposure = lf(lo[KEXPO], hi[KEXPO]) + nightFactor * NIGHT_BRIGHT * 0.5;
 
   // Stars
   starMat.opacity = lf(lo[KSTARS], hi[KSTARS]);
