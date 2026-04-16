@@ -567,10 +567,11 @@ function applyContinuousTime(dt) {
   scene.fog.density = lf(lo[KFOGD], hi[KFOGD]);
   scene.background.copy(lc(lo[KSM], hi[KSM]));
 
-  // Sun directional light — shadows only when sun is meaningfully up
+  // Sun directional light — position follows player so shadow direction is identical
+  // for every object in the world (parallel light, not point light).
   sun.color.copy(lc(lo[KSUNC], hi[KSUNC]));
   sun.intensity = lf(lo[KSUNI], hi[KSUNI]) * sunFade;
-  sun.position.copy(sunPos);
+  sun.position.set(player.x + sunDir.x * 800, sunDir.y * 800, player.z + sunDir.z * 800);
   sun.castShadow = sunFade > 0.20;
 
   // Ambient + hemi — NIGHT_BRIGHT adds directly on top of keyframe values at night.
