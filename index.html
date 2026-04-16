@@ -328,7 +328,7 @@ scene.add(sunSprite);
   window._moonTex = new THREE.CanvasTexture(c);
 })();
 const moonSpriteMat = new THREE.SpriteMaterial({
-  map: window._moonTex, transparent: true, depthWrite: false, depthTest: false,
+  map: window._moonTex, transparent: true, depthWrite: false,
   blending: THREE.AdditiveBlending,
 });
 const moonSprite = new THREE.Sprite(moonSpriteMat);
@@ -352,7 +352,7 @@ scene.add(moonSprite);
 })();
 const moonGlowMat = new THREE.SpriteMaterial({
   map: window._moonGlowTex, transparent: true, opacity: 0,
-  blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
+  blending: THREE.AdditiveBlending, depthWrite: false,
 });
 const moonGlowSprite = new THREE.Sprite(moonGlowMat);
 moonGlowSprite.scale.set(1100, 1100, 1);
