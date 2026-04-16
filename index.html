@@ -338,8 +338,20 @@ scene.add(moonSprite);
 
 // White additive glow — makes moon look like a bright white ball when high in sky.
 // Near horizon the glow fades and the texture sprite shows through (craters visible).
+// Glow needs a circular gradient texture — no map = solid rectangle (the box bug)
+(function buildMoonGlow() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(128,128,0, 128,128,128);
+  g.addColorStop(0,   'rgba(210,228,255,1)');
+  g.addColorStop(0.35,'rgba(180,205,255,0.5)');
+  g.addColorStop(0.65,'rgba(100,140,220,0.15)');
+  g.addColorStop(1.0, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
+  window._moonGlowTex = new THREE.CanvasTexture(c);
+})();
 const moonGlowMat = new THREE.SpriteMaterial({
-  color: 0xDDEEFF, transparent: true, opacity: 0,
+  map: window._moonGlowTex, transparent: true, opacity: 0,
   blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
 });
 const moonGlowSprite = new THREE.Sprite(moonGlowMat);
