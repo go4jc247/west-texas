@@ -954,7 +954,8 @@ function _makeSignTex(text, bg, fg, border) {
   return new THREE.CanvasTexture(c);
 }
 
-const _interiorLights = []; // filled by bldg(), updated in applyContinuousTime
+const _interiorLights = []; // filled by bldg()/town, updated in applyContinuousTime
+const _lanternGlasses = []; // emissive meshes for lantern glow
 
 function makeWesternTown() {
   const town = new THREE.Group();
@@ -1033,11 +1034,40 @@ function makeWesternTown() {
     ceil.position.set(0, wH - 0.05, 0); ceil.receiveShadow = true;
     g.add(ceil);
 
-    // Interior light — warm glow, brightens at night
-    const iLight = new THREE.PointLight(0xFFCC88, 0, Math.max(w, d) * 0.7);
-    iLight.position.set(0, wH - 0.5, 0);
-    g.add(iLight);
-    _interiorLights.push(iLight);
+    // Interior lights — warm glow, brightens at night. Multiple for large rooms.
+    const _lightSpacing = 15; // one light per 15-unit span
+    const _nLightsX = Math.max(1, Math.round(w / _lightSpacing));
+    const _nLightsZ = Math.max(1, Math.round(d / _lightSpacing));
+    for (let lx = 0; lx < _nLightsX; lx++) {
+      for (let lz = 0; lz < _nLightsZ; lz++) {
+        const lxp = (lx + 0.5) / _nLightsX * (w - 2) - (w - 2) / 2;
+        const lzp = (lz + 0.5) / _nLightsZ * (d - 2) - (d - 2) / 2;
+        const iLight = new THREE.PointLight(0xFFCC88, 0, _lightSpacing * 1.2);
+        iLight.position.set(lxp, wH - 0.5, lzp);
+        g.add(iLight);
+        _interiorLights.push(iLight);
+      }
+    }
+
+    // Doorway lantern — warm light above the door on the outside
+    const _doorLanternY = _doorBot + DOOR_H + 0.8;
+    const doorLantern = new THREE.PointLight(0xFFAA66, 0, 12);
+    doorLantern.position.set(_dx, _doorLanternY, d/2 + 1.5);
+    g.add(doorLantern);
+    _interiorLights.push(doorLantern);
+    // Lantern housing (small box)
+    const lanternMat = _wm(0x2A2A2A);
+    const lanternBox = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.6, 0.4), lanternMat);
+    lanternBox.position.set(_dx, _doorLanternY, d/2 + 0.8);
+    g.add(lanternBox);
+    // Lantern glass (emissive when lit — updated in animate via material)
+    const lanternGlass = new THREE.Mesh(
+      new THREE.BoxGeometry(0.25, 0.35, 0.25),
+      new THREE.MeshStandardMaterial({ color: 0xFFCC66, emissive: 0x000000, roughness: 0.3, transparent: true, opacity: 0.8 })
+    );
+    lanternGlass.position.set(_dx, _doorLanternY, d/2 + 0.8);
+    g.add(lanternGlass);
+    _lanternGlasses.push(lanternGlass);
 
     // False front — thin slab above roofline on front face
     if (fH > wH) {
@@ -1235,6 +1265,47 @@ function makeWesternTown() {
     crate.castShadow = true;
     town.add(crate);
   }
+
+  // --- Lamp posts at town entrances (both ends of street) ---
+  const lampMat = _wm(0x1A1A1A); // dark iron
+  const lampGlassMat = () => new THREE.MeshStandardMaterial({
+    color: 0xFFCC66, emissive: 0x000000, roughness: 0.3, transparent: true, opacity: 0.85
+  });
+  function makeLampPost(lx, lz) {
+    // Tall iron post
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 7, 6), lampMat);
+    pole.position.set(lx, 3.5, lz);
+    pole.castShadow = true;
+    town.add(pole);
+    // Cross arm at top
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 1.2), lampMat);
+    arm.position.set(lx, 7, lz);
+    town.add(arm);
+    // Lantern housing
+    const housing = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.6), lampMat);
+    housing.position.set(lx, 7.4, lz);
+    town.add(housing);
+    // Lantern glass (emissive)
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.4), lampGlassMat());
+    glass.position.set(lx, 7.4, lz);
+    town.add(glass);
+    _lanternGlasses.push(glass);
+    // Lantern point light
+    const light = new THREE.PointLight(0xFFAA55, 0, 25);
+    light.position.set(lx, 7.2, lz);
+    town.add(light);
+    _interiorLights.push(light);
+    // Decorative base
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.4, 6), lampMat);
+    base.position.set(lx, 0.2, lz);
+    town.add(base);
+  }
+  // Two lamp posts at each end of town, flanking the street
+  const _lampEndX = townLen / 2 + 3;
+  makeLampPost(-_lampEndX, STREET_W/2 - 1);
+  makeLampPost(-_lampEndX, -(STREET_W/2 - 1));
+  makeLampPost(_lampEndX, STREET_W/2 - 1);
+  makeLampPost(_lampEndX, -(STREET_W/2 - 1));
 
   // Scale entire town up 1.5× — after this, DOOR_H (4.67) becomes 7.0 game units = 7 feet
   town.scale.set(1.5, 1.5, 1.5);
@@ -1562,9 +1633,15 @@ function applyContinuousTime(dt) {
   moonDirLight.intensity = moonVis * 1.2;
   moonDirLight.castShadow = moonVis > 0.15;
 
-  // Interior building lights — glow at night, off during day
+  // Interior/exterior lights — on at dusk, off after sunrise
   const _nightGlow = Math.max(0, 1.0 - sunFade) * 1.5;
   for (const il of _interiorLights) il.intensity = _nightGlow;
+  // Lantern glass emissive — warm glow when lit
+  const _emissiveVal = Math.max(0, 1.0 - sunFade);
+  for (const lg of _lanternGlasses) {
+    lg.material.emissive.setHex(_emissiveVal > 0.1 ? 0xFFAA44 : 0x000000);
+    lg.material.emissiveIntensity = _emissiveVal * 2.0;
+  }
 
   // Clock display — 12h format
   const totalMin = Math.round(timeOfDay * 60) % (24 * 60);
