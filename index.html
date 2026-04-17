@@ -138,8 +138,7 @@ let timeOfDay = 10.0; // start mid-morning
 const TIME_SPEED = 1 / 60; // 1 game-hour per real minute → full day in 24 min
 let SYNC_CLOCK = false;    // when true, timeOfDay tracks the real wall clock
 const SKY_DIST = 5400;     // distance of sun/moon billboards from camera
-let _lastSunDir  = new THREE.Vector3(0, 1, 0);
-let _lastMoonDir = new THREE.Vector3(0, -1, 0);
+// Sun/moon directions are now passed directly to sky shader uniforms in applyContinuousTime.
 
 // Sky keyframes — each row is one moment in the day.
 // Colors stored as hex ints; floats are scalars.
@@ -279,6 +278,16 @@ const skyMat = new THREE.ShaderMaterial({
     sunDiscColor: { value: new THREE.Color(0xFFFFF8) },
     sunDiscSize: { value: 0.03 },
     sunDiscIntensity: { value: 1.2 },
+    sunGlowColor: { value: new THREE.Color(1, 0.85, 0.5) },
+    sunGlowIntensity: { value: 0.0 },
+    moonDirection: { value: new THREE.Vector3(0, -1, 0) },
+    moonDiscSize: { value: 0.065 },
+    moonDiscColor: { value: new THREE.Color(1, 1, 1) },
+    moonDiscIntensity: { value: 0.0 },
+    moonGlowColor: { value: new THREE.Color(0.78, 0.86, 1.0) },
+    moonGlowIntensity: { value: 0.45 },
+    moonGlowMult: { value: 1.2 },
+    moonTex: { value: null },
   },
   vertexShader: `
     varying vec3 vWorldDir;
@@ -289,6 +298,11 @@ const skyMat = new THREE.ShaderMaterial({
   fragmentShader: `
     uniform vec3 topColor, midColor, bottomColor, sunDirection, horizonNear, horizonFar, sunDiscColor;
     uniform float sunDiscSize, sunDiscIntensity;
+    uniform vec3 sunGlowColor;
+    uniform float sunGlowIntensity;
+    uniform vec3 moonDirection, moonDiscColor, moonGlowColor;
+    uniform float moonDiscSize, moonDiscIntensity, moonGlowIntensity, moonGlowMult;
+    uniform sampler2D moonTex;
     varying vec3 vWorldDir;
     void main() {
       vec3 dir = normalize(vWorldDir);
@@ -298,11 +312,32 @@ const skyMat = new THREE.ShaderMaterial({
       float sunDot = dot(normalize(vec3(dir.x, 0.0, dir.z)), normalize(vec3(sunDirection.x, 0.0, sunDirection.z)));
       vec3 hCol = mix(horizonFar, horizonNear, smoothstep(-0.3, 1.0, sunDot));
       col = mix(col, hCol, smoothstep(0.15, 0.0, h) * smoothstep(-0.05, 0.02, h) * 0.8);
+      // Sun — all additive so the center is always the brightest point in the sky.
+      // Layers from widest/dimmest to sharpest/brightest:
       float sAng = acos(clamp(dot(dir, sunDirection), -1.0, 1.0));
-      col += sunDiscColor * exp(-sAng*sAng*8.0) * 0.4 * sunDiscIntensity;
-      // Guard: when intensity=0 the disc color is black; without this guard it paints a black circle.
-      float discBlend = smoothstep(sunDiscSize, sunDiscSize*0.5, sAng) * clamp(sunDiscIntensity, 0.0, 1.0);
-      col = mix(col, sunDiscColor * sunDiscIntensity, discBlend);
+      col += sunGlowColor * exp(-sAng*sAng*0.8) * sunGlowIntensity * 0.15;  // wide corona
+      col += sunGlowColor * exp(-sAng*sAng*4.0) * sunGlowIntensity * 0.3;   // medium glow
+      col += sunGlowColor * exp(-sAng*sAng*12.0) * sunGlowIntensity * 0.5;  // tight glow
+      // Disc core — sharp bright center, additive so it always outshines the sky
+      float discMask = smoothstep(sunDiscSize, sunDiscSize*0.4, sAng);
+      col += sunDiscColor * discMask * sunDiscIntensity * 1.5;
+      // Moon glow halo — rendered in shader so it never clips
+      float moonAng = acos(clamp(dot(dir, moonDirection), -1.0, 1.0));
+      float mgRadius = moonDiscSize * moonGlowMult;
+      col += moonGlowColor * exp(-moonAng*moonAng / (mgRadius*mgRadius*0.5)) * moonDiscIntensity * moonGlowIntensity * 0.25;
+      // Moon disc — texture-mapped from moonTex
+      float moonEdge = smoothstep(moonDiscSize * 1.02, moonDiscSize * 0.94, moonAng);
+      if (moonEdge > 0.0 && moonDiscIntensity > 0.001) {
+        vec3 mAxis  = normalize(moonDirection);
+        vec3 tempUp = (abs(mAxis.y) < 0.95) ? vec3(0.0,1.0,0.0) : vec3(0.0,0.0,1.0);
+        vec3 mRight = normalize(cross(mAxis, tempUp));
+        vec3 mUp2   = normalize(cross(mRight, mAxis));
+        float mu = dot(dir, mRight) / moonDiscSize;
+        float mv = dot(dir, mUp2)   / moonDiscSize;
+        vec2 moonUV = clamp(vec2(mu, -mv) * 0.5 + 0.5, 0.0, 1.0);
+        vec4 mt = texture2D(moonTex, moonUV);
+        col = mix(col, mt.rgb * moonDiscColor, moonEdge * moonDiscIntensity * mt.a);
+      }
       gl_FragColor = vec4(col, 1.0);
     }`
 });
@@ -652,114 +687,53 @@ function updateConstellationLabels() {
 }
 
 // ============================================================
-// SUN SPRITE — bright disc that rides the orbit arc
+// SUN + MOON — rendered entirely in the sky dome shader (no billboard sprites).
+// The sky hemisphere covers the full view, so sun glow and moon can NEVER clip
+// at the viewport edge. Sun glow color/intensity and moon disc/glow are all
+// driven via skyMat.uniforms, updated each frame in applyContinuousTime.
 // ============================================================
-(function buildSunSprite() {
-  const c = document.createElement('canvas'); c.width = c.height = 256;
-  const ctx = c.getContext('2d');
-  // Glow content is compressed into the inner 25% of the canvas radius.
-  // The outer 75% is fully transparent — when the GPU clips the plane at the
-  // viewport edge it only ever cuts through alpha=0 pixels, so no hard line appears.
-  // The plane is scaled 4× to compensate, keeping the same visual glow size.
-  const g = ctx.createRadialGradient(128,128,0, 128,128,128);
-  g.addColorStop(0,    'rgba(255,255,220,1)');
-  g.addColorStop(0.03, 'rgba(255,240,160,1)');   // original 0.12 × 0.25
-  g.addColorStop(0.07, 'rgba(255,200, 60,0.7)'); // original 0.28 × 0.25
-  g.addColorStop(0.14, 'rgba(255,140, 10,0.25)');// original 0.55 × 0.25
-  g.addColorStop(0.25, 'rgba(255,100,  0,0)');   // fully transparent by 25%
-  g.addColorStop(1.0,  'rgba(255,100,  0,0)');   // outer 75% = zero
-  ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
-  window._sunTex = new THREE.CanvasTexture(c);
-})();
-// Billboard mesh — PlaneGeometry instead of Sprite so GPU clips correctly at frustum edges.
-// Three.js Sprite uses a post-projection vertex offset (÷w) that breaks when the center
-// leaves the frustum; a plain Mesh goes through proper perspective clipping.
-const sunSpriteMat = new THREE.MeshBasicMaterial({
-  map: window._sunTex, transparent: true, depthWrite: false,
-  blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-});
-const sunSprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sunSpriteMat);
-sunSprite.scale.set(500, 500, 1);
-sunSprite.frustumCulled = false;
-camera.add(sunSprite);   // camera child → position in camera space → never frustum-clipped
-scene.add(camera);       // required for camera children to participate in the scene graph
+scene.add(camera); // still needed for any future camera children
 
-// ============================================================
-// MOON SPRITE — full moon disc with craters
-// ============================================================
-(function buildMoonSprite() {
-  // Clean white disc at 25% of canvas radius. No fake craters.
+// Build moon fallback texture — clean white disc, no fake craters.
+// Real moon photo swaps in when loaded; this is just the fallback.
+(function buildMoonShaderTex() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const ctx = c.getContext('2d');
-  const DR = 32;
+  const R = 124;
   ctx.save();
-  ctx.beginPath(); ctx.arc(128,128,DR,0,Math.PI*2); ctx.clip();
-  const base = ctx.createRadialGradient(128,128,0, 128,128,DR);
+  ctx.beginPath(); ctx.arc(128,128,R,0,Math.PI*2); ctx.clip();
+  // Simple clean white disc with subtle limb darkening
+  const base = ctx.createRadialGradient(128,128,0, 128,128,R);
   base.addColorStop(0,    'rgba(255,253,245,1)');
   base.addColorStop(0.75, 'rgba(250,248,238,1)');
   base.addColorStop(1.0,  'rgba(230,225,215,1)');
   ctx.fillStyle = base; ctx.fillRect(0,0,256,256);
   ctx.restore();
-  window._moonTex = new THREE.CanvasTexture(c);
+  const tex = new THREE.CanvasTexture(c);
+  skyMat.uniforms.moonTex.value = tex;
 })();
-// alphaTest puts the moon in the OPAQUE pass — it renders before stars and writes
-// to the depth buffer. Stars are in the transparent pass and fail the depth test
-// behind the moon, so they can never show through it.
-// MeshBasicMaterial + PlaneGeometry billboard (same fix as sun — avoids Sprite ÷w clipping)
-const moonSpriteMat = new THREE.MeshBasicMaterial({
-  map: window._moonTex, alphaTest: 0.08, depthWrite: true,
-  transparent: true, side: THREE.DoubleSide,
-});
-// Load a real moon photo and swap it in once downloaded.
+
+// Load real moon photo and swap into sky shader.
+// Try relative path first (works on GitHub Pages), fall back to west-texas/ subfolder (dev file).
+const _moonUrl = document.location.pathname.includes('west-texas') ? './moon.jpg' : './west-texas/moon.jpg';
 new THREE.TextureLoader().load(
-  './moon.jpg',  // local copy — no CORS issues
+  _moonUrl,
   tex => {
-    // Same 25%-radius layout as the procedural texture: disc at radius 256 on a 1024 canvas.
-    const c2 = document.createElement('canvas'); c2.width = c2.height = 1024;
+    const c2 = document.createElement('canvas'); c2.width = c2.height = 512;
     const x2 = c2.getContext('2d');
     const img = tex.image;
-    const PR = 256; // photo disc radius = 25% of half-canvas (512)
+    const R = 248; // disc fills canvas
     x2.save();
-    x2.beginPath(); x2.arc(512, 512, PR, 0, Math.PI * 2); x2.clip();
-    x2.drawImage(img, 512 - PR, 512 - PR, PR * 2, PR * 2);
+    x2.beginPath(); x2.arc(256, 256, R, 0, Math.PI * 2); x2.clip();
+    x2.drawImage(img, 256 - R, 256 - R, R * 2, R * 2);
     x2.restore();
     const realTex = new THREE.CanvasTexture(c2);
-    moonSpriteMat.map = realTex;
-    moonSpriteMat.needsUpdate = true;
+    skyMat.uniforms.moonTex.value = realTex;
     tex.dispose();
   },
   undefined,
   () => { /* fetch failed — keep procedural texture */ }
 );
-const moonSprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), moonSpriteMat);
-moonSprite.scale.set(700, 700, 1);
-moonSprite.frustumCulled = false;
-camera.add(moonSprite);  // camera child — no frustum clipping
-
-// Glow halo — billboard mesh, same pattern
-(function buildMoonGlow() {
-  // Glow content compressed to inner 25% — same transparent-border approach as sun/moon disc.
-  const c = document.createElement('canvas'); c.width = c.height = 256;
-  const ctx = c.getContext('2d');
-  const g = ctx.createRadialGradient(128,128,0, 128,128,128);
-  g.addColorStop(0,     'rgba(220,235,255,0.0)');
-  g.addColorStop(0.105, 'rgba(200,220,255,0.12)'); // original 0.42 × 0.25
-  g.addColorStop(0.17,  'rgba(150,185,240,0.18)'); // original 0.68 × 0.25
-  g.addColorStop(0.25,  'rgba(0,0,0,0)');           // fully transparent by 25%
-  g.addColorStop(1.0,   'rgba(0,0,0,0)');           // outer 75% = zero
-  ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
-  window._moonGlowTex = new THREE.CanvasTexture(c);
-})();
-const moonGlowMat = new THREE.MeshBasicMaterial({
-  map: window._moonGlowTex, transparent: true, opacity: 0,
-  blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true,
-  side: THREE.DoubleSide,
-});
-const moonGlowSprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), moonGlowMat);
-moonGlowSprite.scale.set(820, 820, 1);
-moonGlowSprite.renderOrder = 1;
-moonGlowSprite.frustumCulled = false;
-camera.add(moonGlowSprite); // camera child — no frustum clipping
 
 // ============================================================
 // GROUND — single huge plane that follows the player.
@@ -1017,7 +991,7 @@ function applyContinuousTime(dt) {
   // Sun: fade near horizon
   const sunFade = THREE.MathUtils.clamp(sunPos.y / 15, 0, 1);
   const sunDir = sunPos.clone().normalize();
-  _lastSunDir.copy(sunDir); // saved for camera-space positioning in animate loop
+  // sunDir used below for sky uniforms, lighting, etc.
 
   // Moon visibility — two-part:
   // 1) Time-of-day window: fades in over 1 h after MOON_RISE, out 1 h before MOON_SET.
@@ -1042,7 +1016,6 @@ function applyContinuousTime(dt) {
   const { lf, lc, lo, hi } = lerpSkyState(timeOfDay);
 
   // Sky uniforms
-  // (sunDir already set above, saved into _lastSunDir for animate loop camera-space placement)
   // When sun is below horizon we still want the horizon glow to track
   // where the sun just disappeared, so pass clamped-y direction.
   const horizDir = new THREE.Vector3(sunPos.x, Math.max(sunPos.y, -50), sunPos.z).normalize();
@@ -1095,34 +1068,25 @@ function applyContinuousTime(dt) {
   const _starAngle = ((timeOfDay % 24) / 24) * Math.PI * 2;
   starGroup.setRotationFromAxisAngle(POLARIS_DIR, _starAngle);
 
-  // Sun sprite — position now set in animate loop (camera-space child)
-  // Color tint: warm orange at sunrise/set, white at noon
+  // Sun glow — rendered in sky shader. Drive color from elevation.
   const sunElevation = THREE.MathUtils.clamp(sunDir.y, 0, 1);
-  sunSpriteMat.color.setHSL(0.08 - sunElevation * 0.08, 1 - sunElevation * 0.8, 1);
-  sunSpriteMat.opacity = sunFade;
-  // Scale up when near horizon (atmospheric magnification).
-  // ×4 because glow content is compressed into center 25% of the canvas —
-  // same visual size, but 75% transparent border so viewport clips never show.
-  const sunScale = (500 + (1 - sunElevation) * 300) * 4;
-  sunSprite.scale.set(sunScale, sunScale, 1);
+  const _sgc = skyMat.uniforms.sunGlowColor.value;
+  _sgc.setHSL(0.08 - sunElevation * 0.08, 1 - sunElevation * 0.8, 0.85);
+  skyMat.uniforms.sunGlowIntensity.value = sunFade;
 
-  // Moon sprite — position now set in animate loop (camera-space child)
+  // Moon — rendered in sky shader. No billboard sprites needed.
   const moonDir = moonPos.clone().normalize();
-  _lastMoonDir.copy(moonDir); // saved for camera-space positioning in animate loop
+  skyMat.uniforms.moonDirection.value.copy(moonDir);
 
-  // moonVis = time-of-day window × horizon fade (fully slider-driven, replaces KMOON keyframe)
+  // moonVis = time-of-day window × horizon fade
   const moonVis = moonTimeVis * moonFade;
 
-  // Size — driven by MOON_SIZE slider. ×4 because disc/glow are in center 25% of canvas.
-  moonSprite.scale.set(MOON_SIZE * 4, MOON_SIZE * 4, 1);
-  moonGlowSprite.scale.set(MOON_SIZE * MOON_GLOW_MULT * 4, MOON_SIZE * MOON_GLOW_MULT * 4, 1);
-
-  moonSpriteMat.opacity = moonVis;
-  // MOON_BRIGHT is a pure exposure multiplier applied directly to the texture pixels.
-  // 0=off, 1=photo as-is, 2=double exposure. ACESFilmic tone mapping handles >1
-  // gracefully — highlights compress naturally, detail is preserved, never just white.
-  moonSpriteMat.color.setScalar(MOON_BRIGHT);
-  moonGlowMat.opacity = moonVis * MOON_GLOW_OP * MOON_BRIGHT;
+  // Angular size of moon disc in radians (MOON_SIZE is visual diameter in world units at SKY_DIST)
+  skyMat.uniforms.moonDiscSize.value = (MOON_SIZE / 2) / SKY_DIST;
+  skyMat.uniforms.moonDiscIntensity.value = moonVis;
+  skyMat.uniforms.moonDiscColor.value.setScalar(MOON_BRIGHT);
+  skyMat.uniforms.moonGlowIntensity.value = MOON_GLOW_OP * MOON_BRIGHT;
+  skyMat.uniforms.moonGlowMult.value = MOON_GLOW_MULT;
 
   // Moon directional light: cool blue, casts shadows at night
   moonDirLight.position.set(
@@ -1280,23 +1244,7 @@ function animate() {
   euler.y = -lookYaw;
   euler.x = skyView ? Math.PI / 2 : lookPitch; // sky view forces straight up
   camera.quaternion.setFromEuler(euler);
-  // Sun/moon billboards: position in camera space. No fade needed — the textures have
-  // a 75% transparent border so the GPU viewport clip always hits alpha=0 pixels.
-  {
-    const _invQ = camera.quaternion.clone().invert();
-    // Sun
-    const _sc = _lastSunDir.clone().applyQuaternion(_invQ);
-    sunSprite.visible = _sc.z < 0;
-    if (_sc.z < 0) sunSprite.position.set(_sc.x*SKY_DIST, _sc.y*SKY_DIST, _sc.z*SKY_DIST);
-    // Moon + glow
-    const _mc = _lastMoonDir.clone().applyQuaternion(_invQ);
-    moonSprite.visible    = _mc.z < 0;
-    moonGlowSprite.visible = _mc.z < 0;
-    if (_mc.z < 0) {
-      moonSprite.position.set(_mc.x*SKY_DIST, _mc.y*SKY_DIST, _mc.z*SKY_DIST);
-      moonGlowSprite.position.set(_mc.x*(SKY_DIST-10), _mc.y*(SKY_DIST-10), _mc.z*(SKY_DIST-10));
-    }
-  }
+  // Sun/moon are now rendered in the sky dome shader — no billboard positioning needed.
 
   // Sky, stars, mountains all ride along with the camera.
   skyDome.position.set(player.x, 0, player.z);
