@@ -870,7 +870,10 @@ document.addEventListener('keydown', e => {
   // When panel is hidden, these keys FF/RW time (handled in animate loop instead).
   if (e.code === 'Equal' || e.code === 'Minus') {
     if (document.getElementById('tweaks').style.display !== 'none') {
-      adjustTweak(TWEAK_LIST[selectedTweakIdx], e.code === 'Equal' ? 1 : -1);
+      // 'fftime' uses smooth continuous advance in the animate loop — skip discrete step here
+      if (TWEAK_LIST[selectedTweakIdx] !== 'fftime') {
+        adjustTweak(TWEAK_LIST[selectedTweakIdx], e.code === 'Equal' ? 1 : -1);
+      }
     }
   }
   // H: hide/show tweaks panel
@@ -1128,9 +1131,11 @@ function animate() {
   const _tweaksVisible = document.getElementById('tweaks').style.display !== 'none';
   const _holdFF = keys['Equal'] || keys['NumpadAdd'];
   const _holdRW = keys['Minus'] || keys['NumpadSubtract'];
-  if (_holdFF && !_tweaksVisible) {
+  // 'fftime' selected + panel visible → keys still do smooth FF/RW (not discrete steps)
+  const _ffTimeSelected = _tweaksVisible && TWEAK_LIST[selectedTweakIdx] === 'fftime';
+  if (_holdFF && (!_tweaksVisible || _ffTimeSelected)) {
     timeOfDay = (timeOfDay + dt * TIME_SPEED * 60) % 24;
-  } else if (_holdRW && !_tweaksVisible) {
+  } else if (_holdRW && (!_tweaksVisible || _ffTimeSelected)) {
     timeOfDay = (timeOfDay - dt * TIME_SPEED * 60 + 24) % 24;
   } else if (!_holdFF && !_holdRW) {
     if (SYNC_CLOCK) {
@@ -1139,9 +1144,8 @@ function animate() {
     } else {
       timeOfDay = (timeOfDay + dt * TIME_SPEED) % 24;
     }
-  }
-  else {
-    // FF/RW key held but tweaks are visible → key adjusts tweaks; time still runs normally
+  } else {
+    // FF/RW held but tweaks visible and a non-fftime tweak selected → key adjusts tweak; time runs normally
     if (SYNC_CLOCK) {
       const _n = new Date();
       timeOfDay = _n.getHours() + _n.getMinutes() / 60 + _n.getSeconds() / 3600;
