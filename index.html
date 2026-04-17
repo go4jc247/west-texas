@@ -291,21 +291,42 @@ const skyMat = new THREE.ShaderMaterial({
     resolution: { value: new THREE.Vector2(innerWidth, innerHeight) },
   },
   vertexShader: `
+    uniform vec3 sunDirection, moonDirection;
+    uniform float sunDiscSize, moonDiscSize;
+    uniform vec2 resolution;
     varying vec3 vWorldDir;
+    // Pass screen-space sun/moon pixel positions + disc pixel radius to frag shader
+    varying vec2 vSunPx;
+    varying vec2 vMoonPx;
+    varying float vSunDiscPx;
+    varying float vMoonDiscPx;
+    varying float vSunVis;
+    varying float vMoonVis;
     void main() {
       vWorldDir = normalize((modelMatrix * vec4(position, 1.0)).xyz - cameraPosition);
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      // Project sun/moon world positions to screen pixels
+      float focalY = projectionMatrix[1][1]; // = 1/tan(fov/2)
+      vec4 sc = projectionMatrix * viewMatrix * vec4(cameraPosition + sunDirection * 5000.0, 1.0);
+      vSunVis = step(0.001, sc.w);
+      vSunPx = (sc.xy / sc.w * 0.5 + 0.5) * resolution;
+      vSunDiscPx = sunDiscSize * focalY * resolution.y * 0.5;
+      vec4 mc = projectionMatrix * viewMatrix * vec4(cameraPosition + moonDirection * 5000.0, 1.0);
+      vMoonVis = step(0.001, mc.w);
+      vMoonPx = (mc.xy / mc.w * 0.5 + 0.5) * resolution;
+      vMoonDiscPx = moonDiscSize * focalY * resolution.y * 0.5;
     }`,
   fragmentShader: `
     uniform vec3 topColor, midColor, bottomColor, sunDirection, horizonNear, horizonFar, sunDiscColor;
-    uniform float sunDiscSize, sunDiscIntensity;
+    uniform float sunDiscIntensity;
     uniform vec3 sunGlowColor;
     uniform float sunGlowIntensity;
-    uniform vec3 moonDirection, moonDiscColor, moonGlowColor;
-    uniform float moonDiscSize, moonDiscIntensity, moonGlowIntensity, moonGlowMult;
+    uniform vec3 moonDiscColor, moonGlowColor;
+    uniform float moonDiscIntensity, moonGlowIntensity, moonGlowMult;
     uniform sampler2D moonTex;
-    uniform vec2 resolution;
     varying vec3 vWorldDir;
+    varying vec2 vSunPx, vMoonPx;
+    varying float vSunDiscPx, vMoonDiscPx, vSunVis, vMoonVis;
     void main() {
       vec3 dir = normalize(vWorldDir);
       float h = dir.y;
@@ -316,38 +337,24 @@ const skyMat = new THREE.ShaderMaterial({
       vec3 hCol = mix(horizonFar, horizonNear, smoothstep(-0.3, 1.0, sunDot));
       col = mix(col, hCol, smoothstep(0.15, 0.0, h) * smoothstep(-0.05, 0.02, h) * 0.8);
 
-      // === SUN — screen-space rendering for distortion-free circles ===
-      // Project sun center to pixel coords
-      vec4 _sClip = projectionMatrix * viewMatrix * vec4(cameraPosition + sunDirection * 5000.0, 1.0);
-      float _sVis = step(0.001, _sClip.w); // 0 if behind camera
-      vec2 _sPx = (_sClip.xy / _sClip.w * 0.5 + 0.5) * resolution;
-      float _sDist = length(gl_FragCoord.xy - _sPx);
-      // Disc radius in pixels: angular size → pixels via projection focal length
-      float _sDiscPx = sunDiscSize * projectionMatrix[1][1] * resolution.y * 0.5;
-      float sn = _sDist / max(_sDiscPx, 1.0); // normalized: 0=center, 1=disc edge
-      // Glow layers (additive, widest to tightest)
-      col += sunGlowColor * exp(-sn*sn*0.0007) * sunGlowIntensity * 0.15 * _sVis;
-      col += sunGlowColor * exp(-sn*sn*0.004)  * sunGlowIntensity * 0.3  * _sVis;
-      col += sunGlowColor * exp(-sn*sn*0.012)  * sunGlowIntensity * 0.5  * _sVis;
-      // Disc core (additive — always brightest point)
+      // === SUN — screen-space for distortion-free circles ===
+      float _sDist = length(gl_FragCoord.xy - vSunPx);
+      float sn = _sDist / max(vSunDiscPx, 1.0); // 0=center, 1=disc edge
+      col += sunGlowColor * exp(-sn*sn*0.0007) * sunGlowIntensity * 0.15 * vSunVis;
+      col += sunGlowColor * exp(-sn*sn*0.004)  * sunGlowIntensity * 0.3  * vSunVis;
+      col += sunGlowColor * exp(-sn*sn*0.012)  * sunGlowIntensity * 0.5  * vSunVis;
       float discMask = smoothstep(1.1, 0.4, sn);
-      col += sunDiscColor * discMask * sunDiscIntensity * 1.5 * _sVis;
+      col += sunDiscColor * discMask * sunDiscIntensity * 1.5 * vSunVis;
 
-      // === MOON — screen-space rendering ===
-      vec4 _mClip = projectionMatrix * viewMatrix * vec4(cameraPosition + moonDirection * 5000.0, 1.0);
-      float _mVis = step(0.001, _mClip.w);
-      vec2 _mPx = (_mClip.xy / _mClip.w * 0.5 + 0.5) * resolution;
-      float _mDist = length(gl_FragCoord.xy - _mPx);
-      float _mDiscPx = moonDiscSize * projectionMatrix[1][1] * resolution.y * 0.5;
-      float mn = _mDist / max(_mDiscPx, 1.0);
-      // Glow halo
-      float _mgPx = _mDiscPx * moonGlowMult;
+      // === MOON — screen-space ===
+      float _mDist = length(gl_FragCoord.xy - vMoonPx);
+      float mn = _mDist / max(vMoonDiscPx, 1.0);
+      float _mgPx = vMoonDiscPx * moonGlowMult;
       float mgn = _mDist / max(_mgPx, 1.0);
-      col += moonGlowColor * exp(-mgn*mgn*0.5) * moonDiscIntensity * moonGlowIntensity * 0.25 * _mVis;
-      // Moon disc — texture mapped using screen-space UV
+      col += moonGlowColor * exp(-mgn*mgn*0.5) * moonDiscIntensity * moonGlowIntensity * 0.25 * vMoonVis;
       float moonEdge = smoothstep(1.05, 0.94, mn);
-      if (moonEdge > 0.0 && moonDiscIntensity > 0.001 && _mVis > 0.0) {
-        vec2 moonOff = (gl_FragCoord.xy - _mPx) / _mDiscPx;
+      if (moonEdge > 0.0 && moonDiscIntensity > 0.001 && vMoonVis > 0.0) {
+        vec2 moonOff = (gl_FragCoord.xy - vMoonPx) / vMoonDiscPx;
         vec2 moonUV = clamp(vec2(moonOff.x, -moonOff.y) * 0.5 + 0.5, 0.0, 1.0);
         vec4 mt = texture2D(moonTex, moonUV);
         col = mix(col, mt.rgb * moonDiscColor, moonEdge * moonDiscIntensity * mt.a);
