@@ -65,27 +65,23 @@ canvas { display: block; }
 <div id="hud"><span id="hud-text"></span></div>
 <div id="compass-wrap"><canvas id="compass-canvas" width="100" height="100"></canvas></div>
 <div id="minimap"><canvas id="minimap-canvas" width="320" height="320"></canvas></div>
-<div id="tweaks" style="position:fixed;top:10px;left:10px;background:rgba(0,0,0,0.55);color:#eee;font:12px monospace;padding:10px 12px;border-radius:6px;z-index:10;line-height:1.6;pointer-events:auto;min-width:180px">
-  <div style="font-weight:bold;margin-bottom:4px">Tweaks</div>
+<div id="tweaks" style="position:fixed;top:10px;left:10px;background:rgba(0,0,0,0.55);color:#eee;font:12px monospace;padding:10px 12px;border-radius:6px;z-index:10;line-height:1.6;pointer-events:auto;min-width:210px">
+  <div style="font-weight:bold;margin-bottom:2px">Tweaks &nbsp;<span style="font-weight:normal;opacity:0.6;font-size:10px">Tab=select &nbsp; - / = adjust</span></div>
   <div style="opacity:0.6;font-size:10px;margin-bottom:2px">— Movement —</div>
-  <div>Turn speed: <span id="tv-turn">1.80</span> <button data-tw="turn" data-d="-1">−</button><button data-tw="turn" data-d="1">+</button></div>
-  <div>Mouse sens: <span id="tv-mouse">0.0020</span> <button data-tw="mouse" data-d="-1">−</button><button data-tw="mouse" data-d="1">+</button></div>
-  <div>Walk: <span id="tv-walk">30</span> <button data-tw="walk" data-d="-1">−</button><button data-tw="walk" data-d="1">+</button></div>
-  <div>Run: <span id="tv-run">65</span> <button data-tw="run" data-d="-1">−</button><button data-tw="run" data-d="1">+</button></div>
-  <div style="opacity:0.6;font-size:10px;margin:4px 0 2px">— Sky —</div>
-  <div>Night bright: <span id="tv-night">0.50</span> <button data-tw="night" data-d="-1">−</button><button data-tw="night" data-d="1">+</button></div>
-  <div style="opacity:0.6;font-size:10px;margin:4px 0 2px">— Moon —</div>
-  <div>Brightness: <span id="tv-moon">1.00</span> <button data-tw="moon" data-d="-1">−</button><button data-tw="moon" data-d="1">+</button></div>
-  <div>Size: <span id="tv-msize">700</span> <button data-tw="msize" data-d="-1">−</button><button data-tw="msize" data-d="1">+</button></div>
-  <div>Glow size: <span id="tv-mgsize">1.20</span> <button data-tw="mgsize" data-d="-1">−</button><button data-tw="mgsize" data-d="1">+</button></div>
-  <div>Glow amt: <span id="tv-mgop">0.45</span> <button data-tw="mgop" data-d="-1">−</button><button data-tw="mgop" data-d="1">+</button></div>
-  <div>Rise hr: <span id="tv-mrise">19.0</span> <button data-tw="mrise" data-d="-1">−</button><button data-tw="mrise" data-d="1">+</button></div>
-  <div>Set hr: <span id="tv-mset">6.0</span> <button data-tw="mset" data-d="-1">−</button><button data-tw="mset" data-d="1">+</button></div>
-  <div>Horiz fade: <span id="tv-mfade">4</span> <button data-tw="mfade" data-d="-1">−</button><button data-tw="mfade" data-d="1">+</button></div>
-  <div style="margin-top:4px;opacity:0.7;font-size:11px">
-    [ ] turn &nbsp; ; ' mouse<br>
-    , . walk &nbsp; K L run &nbsp; N M night &nbsp; O P moon
-  </div>
+  <div id="tr-turn"  ><span id="tc-turn"  style="color:#FFD700;width:10px;display:inline-block"> </span>Turn speed: <span id="tv-turn">1.80</span> <button data-tw="turn"  data-d="-1">−</button><button data-tw="turn"  data-d="1">+</button></div>
+  <div id="tr-mouse" ><span id="tc-mouse" style="color:#FFD700;width:10px;display:inline-block"> </span>Mouse sens: <span id="tv-mouse">0.0020</span> <button data-tw="mouse" data-d="-1">−</button><button data-tw="mouse" data-d="1">+</button></div>
+  <div id="tr-walk"  ><span id="tc-walk"  style="color:#FFD700;width:10px;display:inline-block"> </span>Walk: <span id="tv-walk">30</span> <button data-tw="walk"  data-d="-1">−</button><button data-tw="walk"  data-d="1">+</button></div>
+  <div id="tr-run"   ><span id="tc-run"   style="color:#FFD700;width:10px;display:inline-block"> </span>Run: <span id="tv-run">65</span> <button data-tw="run"   data-d="-1">−</button><button data-tw="run"   data-d="1">+</button></div>
+  <div style="opacity:0.6;font-size:10px;margin:3px 0 2px">— Sky —</div>
+  <div id="tr-night" ><span id="tc-night" style="color:#FFD700;width:10px;display:inline-block"> </span>Night bright: <span id="tv-night">0.50</span> <button data-tw="night" data-d="-1">−</button><button data-tw="night" data-d="1">+</button></div>
+  <div style="opacity:0.6;font-size:10px;margin:3px 0 2px">— Moon —</div>
+  <div id="tr-moon"  ><span id="tc-moon"  style="color:#FFD700;width:10px;display:inline-block"> </span>Brightness: <span id="tv-moon">1.00</span> <button data-tw="moon"  data-d="-1">−</button><button data-tw="moon"  data-d="1">+</button></div>
+  <div id="tr-msize" ><span id="tc-msize" style="color:#FFD700;width:10px;display:inline-block"> </span>Size: <span id="tv-msize">700</span> <button data-tw="msize" data-d="-1">−</button><button data-tw="msize" data-d="1">+</button></div>
+  <div id="tr-mgsize"><span id="tc-mgsize"style="color:#FFD700;width:10px;display:inline-block"> </span>Glow size: <span id="tv-mgsize">1.20</span> <button data-tw="mgsize" data-d="-1">−</button><button data-tw="mgsize" data-d="1">+</button></div>
+  <div id="tr-mgop"  ><span id="tc-mgop"  style="color:#FFD700;width:10px;display:inline-block"> </span>Glow amt: <span id="tv-mgop">0.45</span> <button data-tw="mgop"  data-d="-1">−</button><button data-tw="mgop"  data-d="1">+</button></div>
+  <div id="tr-mrise" ><span id="tc-mrise" style="color:#FFD700;width:10px;display:inline-block"> </span>Rise hr: <span id="tv-mrise">19.0</span> <button data-tw="mrise" data-d="-1">−</button><button data-tw="mrise" data-d="1">+</button></div>
+  <div id="tr-mset"  ><span id="tc-mset"  style="color:#FFD700;width:10px;display:inline-block"> </span>Set hr: <span id="tv-mset">6.0</span> <button data-tw="mset"  data-d="-1">−</button><button data-tw="mset"  data-d="1">+</button></div>
+  <div id="tr-mfade" ><span id="tc-mfade" style="color:#FFD700;width:10px;display:inline-block"> </span>Horiz fade: <span id="tv-mfade">4</span> <button data-tw="mfade" data-d="-1">−</button><button data-tw="mfade" data-d="1">+</button></div>
 </div>
 
 <script type="importmap">
@@ -373,7 +369,7 @@ const moonSpriteMat = new THREE.SpriteMaterial({
 // Load a real moon photo from the Three.js CDN and swap it in once downloaded.
 // Falls back to the procedural canvas texture above if the load fails.
 new THREE.TextureLoader().load(
-  'https://threejs.org/examples/textures/planets/moon_1024.jpg',
+  './moon.jpg',  // local copy — no CORS issues
   tex => {
     // The photo is a square JPEG — wrap it inside a clipped canvas circle so
     // the sprite stays round and the alphaTest edge is clean.
@@ -546,32 +542,16 @@ const keys = {};
 let locked = false;
 
 // ============================================================
-// CONTROLS
+// TWEAKS — Tab cycles selection, - / = adjusts, buttons also work
 // ============================================================
-document.addEventListener('keydown', e => {
-  keys[e.code] = true;
-  if (e.code === 'BracketLeft')  { adjustTweak('turn', -1);
-  } else if (e.code === 'BracketRight') { adjustTweak('turn', 1);
-  } else if (e.code === 'Semicolon')    { adjustTweak('mouse', -1);
-  } else if (e.code === 'Quote')        { adjustTweak('mouse', 1);
-  } else if (e.code === 'Comma')        { adjustTweak('walk', -1);
-  } else if (e.code === 'Period')       { adjustTweak('walk', 1);
-  } else if (e.code === 'KeyK')         { adjustTweak('run', -1);
-  } else if (e.code === 'KeyL')         { adjustTweak('run', 1);
-  } else if (e.code === 'KeyN')         { adjustTweak('night', -1);
-  } else if (e.code === 'KeyM')         { adjustTweak('night', 1);
-  } else if (e.code === 'KeyO')         { adjustTweak('moon', -1);
-  } else if (e.code === 'KeyP')         { adjustTweak('moon', 1);
-  }
-  if (locked) e.preventDefault();
-});
-document.addEventListener('keyup', e => keys[e.code] = false);
+const TWEAK_LIST = ['turn','mouse','walk','run','night','moon','msize','mgsize','mgop','mrise','mset','mfade'];
+let selectedTweakIdx = 5; // start on Moon Brightness
 
 function refreshTweaks() {
-  document.getElementById('tv-turn').textContent = TURN_SPEED.toFixed(2);
-  document.getElementById('tv-mouse').textContent = MOUSE_SENS.toFixed(4);
-  document.getElementById('tv-walk').textContent = WALK_SPEED.toFixed(0);
-  document.getElementById('tv-run').textContent = RUN_SPEED.toFixed(0);
+  document.getElementById('tv-turn').textContent   = TURN_SPEED.toFixed(2);
+  document.getElementById('tv-mouse').textContent  = MOUSE_SENS.toFixed(4);
+  document.getElementById('tv-walk').textContent   = WALK_SPEED.toFixed(0);
+  document.getElementById('tv-run').textContent    = RUN_SPEED.toFixed(0);
   document.getElementById('tv-night').textContent  = NIGHT_BRIGHT.toFixed(2);
   document.getElementById('tv-moon').textContent   = MOON_BRIGHT.toFixed(2);
   document.getElementById('tv-msize').textContent  = MOON_SIZE.toFixed(0);
@@ -580,22 +560,46 @@ function refreshTweaks() {
   document.getElementById('tv-mrise').textContent  = MOON_RISE.toFixed(1);
   document.getElementById('tv-mset').textContent   = MOON_SET.toFixed(1);
   document.getElementById('tv-mfade').textContent  = MOON_FADE_ALT.toFixed(0);
+  // Update cursor indicators
+  for (const key of TWEAK_LIST) {
+    const el = document.getElementById('tc-' + key);
+    if (el) el.textContent = (key === TWEAK_LIST[selectedTweakIdx]) ? '►' : ' ';
+  }
 }
 function adjustTweak(kind, dir) {
-  if (kind === 'turn')  TURN_SPEED  = Math.max(0.1, TURN_SPEED  + dir * 0.1);
-  if (kind === 'mouse') MOUSE_SENS  = Math.max(0.0002, MOUSE_SENS + dir * 0.0002);
-  if (kind === 'walk')  WALK_SPEED  = Math.max(1, WALK_SPEED + dir * 5);
-  if (kind === 'run')   RUN_SPEED   = Math.max(1, RUN_SPEED  + dir * 5);
-  if (kind === 'night')  NIGHT_BRIGHT   = Math.max(0,   NIGHT_BRIGHT   + dir * 0.10);
-  if (kind === 'moon')   MOON_BRIGHT    = Math.max(0,   MOON_BRIGHT    + dir * 0.10);
-  if (kind === 'msize')  MOON_SIZE      = Math.max(50,  MOON_SIZE      + dir * 50);
-  if (kind === 'mgsize') MOON_GLOW_MULT = Math.max(1.0, MOON_GLOW_MULT + dir * 0.10);
-  if (kind === 'mgop')   MOON_GLOW_OP   = Math.max(0,   MOON_GLOW_OP   + dir * 0.05);
-  if (kind === 'mrise')  MOON_RISE      = ((MOON_RISE  + dir * 0.5 + 24) % 24);
-  if (kind === 'mset')   MOON_SET       = ((MOON_SET   + dir * 0.5 + 24) % 24);
-  if (kind === 'mfade')  MOON_FADE_ALT  = Math.max(1,   MOON_FADE_ALT  + dir * 1);
+  if (kind === 'turn')   TURN_SPEED     = Math.max(0.1,    TURN_SPEED     + dir * 0.10);
+  if (kind === 'mouse')  MOUSE_SENS     = Math.max(0.0002, MOUSE_SENS     + dir * 0.0002);
+  if (kind === 'walk')   WALK_SPEED     = Math.max(1,      WALK_SPEED     + dir * 5);
+  if (kind === 'run')    RUN_SPEED      = Math.max(1,      RUN_SPEED      + dir * 5);
+  if (kind === 'night')  NIGHT_BRIGHT   = Math.max(0,      NIGHT_BRIGHT   + dir * 0.10);
+  if (kind === 'moon')   MOON_BRIGHT    = Math.max(0,      MOON_BRIGHT    + dir * 0.10);
+  if (kind === 'msize')  MOON_SIZE      = Math.max(50,     MOON_SIZE      + dir * 50);
+  if (kind === 'mgsize') MOON_GLOW_MULT = Math.max(1.0,    MOON_GLOW_MULT + dir * 0.10);
+  if (kind === 'mgop')   MOON_GLOW_OP   = Math.max(0,      MOON_GLOW_OP   + dir * 0.05);
+  if (kind === 'mrise')  MOON_RISE      = ((MOON_RISE      + dir * 0.5 + 24) % 24);
+  if (kind === 'mset')   MOON_SET       = ((MOON_SET       + dir * 0.5 + 24) % 24);
+  if (kind === 'mfade')  MOON_FADE_ALT  = Math.max(1,      MOON_FADE_ALT  + dir * 1);
   refreshTweaks();
 }
+
+// ============================================================
+// CONTROLS
+// ============================================================
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  // Tab always cycles through tweaks (prevent browser tab-focus behavior)
+  if (e.code === 'Tab') {
+    e.preventDefault();
+    selectedTweakIdx = (selectedTweakIdx + (e.shiftKey ? -1 : 1) + TWEAK_LIST.length) % TWEAK_LIST.length;
+    refreshTweaks();
+    return;
+  }
+  // = key (no shift needed) increases, - key decreases the selected param
+  if (e.code === 'Equal')  { adjustTweak(TWEAK_LIST[selectedTweakIdx],  1); }
+  if (e.code === 'Minus')  { adjustTweak(TWEAK_LIST[selectedTweakIdx], -1); }
+  if (locked) e.preventDefault();
+});
+document.addEventListener('keyup', e => keys[e.code] = false);
 document.querySelectorAll('#tweaks button').forEach(b => {
   b.addEventListener('click', ev => {
     ev.stopPropagation();
