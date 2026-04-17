@@ -105,7 +105,7 @@ const WORLD_SIZE = 2000;              // world wraps every WORLD_SIZE units in X
 const HALF = WORLD_SIZE / 2;
 const PLAYER_HEIGHT = 5;
 let WALK_SPEED = 30;
-let RUN_SPEED = 65;
+let RUN_SPEED = 500;
 let TURN_SPEED = 1.8;
 let MOUSE_SENS = 0.002;
 let NIGHT_BRIGHT   = 0.50; // ADDITIVE ambient added at night on top of keyframe value
@@ -826,8 +826,11 @@ let lookYaw = 0, lookPitch = 0;
 const keys = {};
 let locked = false;
 let skyView = false;
-let cameraMode = 'fps';
+let cameraMode = 'shoulder';
 let playerManMesh = null;
+let camZoom = 14;        // shoulder cam distance from player
+let camSmooth = new THREE.Vector3(); // smoothed camera position
+let camInitialized = false;
 const colliders = [];
 let townOriginX = 0, townOriginZ = 0;
 const boardwalkZones = [];
@@ -904,6 +907,8 @@ function _makeSignTex(text, bg, fg, border) {
   return new THREE.CanvasTexture(c);
 }
 
+const _interiorLights = []; // filled by bldg(), updated in applyContinuousTime
+
 function makeWesternTown() {
   const town = new THREE.Group();
   // All dimensions in pre-scale units. Town is scaled 1.5× at the end.
@@ -931,11 +936,61 @@ function makeWesternTown() {
     const mat = _wm(color);
     const paintMat = opts.paint ? _wm(opts.paint) : mat;
 
-    // Main walls
-    const walls = new THREE.Mesh(new THREE.BoxGeometry(w, wH, d), mat);
-    walls.position.y = wH / 2;
-    walls.castShadow = true; walls.receiveShadow = true;
-    g.add(walls);
+    // Walls — separate panels so doorway is open and interior is walkable
+    const WT = 0.2; // wall thickness
+    const intMat = _wm(0x6A5A48); // interior wall color (darker wood)
+    const _dx = opts.doorX || 0;
+    const _doorBot = BOARD_H;
+    const doorW = 2.6; // door opening width
+
+    // Back wall
+    const backW = new THREE.Mesh(new THREE.BoxGeometry(w, wH, WT), mat);
+    backW.position.set(0, wH/2, -d/2); backW.castShadow = true; backW.receiveShadow = true;
+    g.add(backW);
+    // Left wall
+    const leftW = new THREE.Mesh(new THREE.BoxGeometry(WT, wH, d), mat);
+    leftW.position.set(-w/2, wH/2, 0); leftW.castShadow = true; leftW.receiveShadow = true;
+    g.add(leftW);
+    // Right wall
+    const rightW = new THREE.Mesh(new THREE.BoxGeometry(WT, wH, d), mat);
+    rightW.position.set(w/2, wH/2, 0); rightW.castShadow = true; rightW.receiveShadow = true;
+    g.add(rightW);
+    // Front wall — three pieces around the doorway opening
+    const frontLeftW = w/2 + _dx - doorW/2;
+    if (frontLeftW > 0.1) {
+      const fl = new THREE.Mesh(new THREE.BoxGeometry(frontLeftW, wH, WT), mat);
+      fl.position.set(-w/2 + frontLeftW/2, wH/2, d/2);
+      fl.castShadow = true; fl.receiveShadow = true; g.add(fl);
+    }
+    const frontRightW = w/2 - _dx - doorW/2;
+    if (frontRightW > 0.1) {
+      const fr = new THREE.Mesh(new THREE.BoxGeometry(frontRightW, wH, WT), mat);
+      fr.position.set(w/2 - frontRightW/2, wH/2, d/2);
+      fr.castShadow = true; fr.receiveShadow = true; g.add(fr);
+    }
+    // Above door
+    const aboveDoorH = wH - _doorBot - DOOR_H;
+    if (aboveDoorH > 0.1) {
+      const fa = new THREE.Mesh(new THREE.BoxGeometry(doorW + 0.4, aboveDoorH, WT), mat);
+      fa.position.set(_dx, _doorBot + DOOR_H + aboveDoorH/2, d/2);
+      fa.castShadow = true; g.add(fa);
+    }
+
+    // Floor (interior)
+    const floorMat = _wm(0x5A4A38);
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(w - WT, 0.1, d - WT), floorMat);
+    floor.position.set(0, BOARD_H, 0); floor.receiveShadow = true;
+    g.add(floor);
+    // Ceiling
+    const ceil = new THREE.Mesh(new THREE.BoxGeometry(w - WT, 0.1, d - WT), intMat);
+    ceil.position.set(0, wH - 0.05, 0); ceil.receiveShadow = true;
+    g.add(ceil);
+
+    // Interior light — warm glow, brightens at night
+    const iLight = new THREE.PointLight(0xFFCC88, 0, d * 0.8);
+    iLight.position.set(0, wH - 0.5, 0);
+    g.add(iLight);
+    _interiorLights.push(iLight);
 
     // False front — thin slab above roofline on front face
     if (fH > wH) {
@@ -944,32 +999,25 @@ function makeWesternTown() {
       ff.position.set(0, wH + ffH / 2, d / 2);
       ff.castShadow = true;
       g.add(ff);
-      // Cornice trim at top of false front
       const trim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.8, 0.35, 0.6), _wm(0x5A4A3A));
       trim.position.set(0, fH + 0.15, d / 2);
       g.add(trim);
     }
 
-    // Roof — flat tin, slight slope (thin box, tilted)
+    // Roof — flat tin, slight slope
     const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 0.15, d + 0.8), roofMat);
     roof.position.set(0, wH + 0.07, -0.4);
-    roof.rotation.x = 0.06; // slight backward slope
+    roof.rotation.x = 0.06;
     roof.receiveShadow = true; roof.castShadow = true;
     g.add(roof);
 
-    // Front door — bottom at boardwalk level (BOARD_H)
-    const _dx = opts.doorX || 0;
-    const _doorBot = BOARD_H;
-    const door = new THREE.Mesh(new THREE.BoxGeometry(2.4, DOOR_H, 0.15), doorMat);
-    door.position.set(_dx, _doorBot + DOOR_H / 2, d / 2 + 0.08);
-    g.add(door);
-    // Door frame
+    // Door frame (open doorway — no solid door)
     const _dfH = DOOR_H + 0.3;
-    const dfL = new THREE.Mesh(new THREE.BoxGeometry(0.2, _dfH, 0.2), frameMat);
-    dfL.position.set(_dx - 1.3, _doorBot + _dfH / 2, d / 2 + 0.1);
-    const dfR = dfL.clone(); dfR.position.x = _dx + 1.3;
-    const dfT = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.25, 0.2), frameMat);
-    dfT.position.set(_dx, _doorBot + DOOR_H + 0.15, d / 2 + 0.1);
+    const dfL = new THREE.Mesh(new THREE.BoxGeometry(0.2, _dfH, 0.3), frameMat);
+    dfL.position.set(_dx - doorW/2 - 0.1, _doorBot + _dfH / 2, d / 2 + 0.05);
+    const dfR = dfL.clone(); dfR.position.x = _dx + doorW/2 + 0.1;
+    const dfT = new THREE.Mesh(new THREE.BoxGeometry(doorW + 0.4, 0.25, 0.3), frameMat);
+    dfT.position.set(_dx, _doorBot + DOOR_H + 0.15, d / 2 + 0.05);
     g.add(dfL, dfR, dfT);
 
     // Windows — evenly spaced on front face, centered between door-top and porch
@@ -1032,7 +1080,7 @@ function makeWesternTown() {
       const sFg = opts.signFg || '#E8D5B0';
       const sBorder = opts.signBorder || sFg;
       const sTex = _makeSignTex(signText, sBg, sFg, sBorder);
-      const sMat = new THREE.MeshBasicMaterial({ map: sTex });
+      const sMat = new THREE.MeshStandardMaterial({ map: sTex, roughness: 0.9 });
       const sW = Math.min(w * 0.85, 9);
       const sign = new THREE.Mesh(new THREE.PlaneGeometry(sW, sW * 0.22), sMat);
       sign.position.set(0, fH - 1.5, d / 2 + 0.25);
@@ -1341,6 +1389,12 @@ document.addEventListener('mousemove', e => {
   lookPitch -= e.movementY * MOUSE_SENS;
   lookPitch = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, lookPitch));
 });
+// Wheel: zoom in/out (scroll), camera angle adjustment handled by mouse Y
+document.addEventListener('wheel', e => {
+  if (!locked) return;
+  e.preventDefault();
+  camZoom = Math.max(3, Math.min(40, camZoom + e.deltaY * 0.02));
+}, { passive: false });
 
 window.startGame = () => renderer.domElement.requestPointerLock();
 
@@ -1459,6 +1513,10 @@ function applyContinuousTime(dt) {
   );
   moonDirLight.intensity = moonVis * 1.2;
   moonDirLight.castShadow = moonVis > 0.15;
+
+  // Interior building lights — glow at night, off during day
+  const _nightGlow = Math.max(0, 1.0 - sunFade) * 1.5;
+  for (const il of _interiorLights) il.intensity = _nightGlow;
 
   // Clock display — 12h format
   const totalMin = Math.round(timeOfDay * 60) % (24 * 60);
@@ -1614,22 +1672,58 @@ function animate() {
     playerManMesh.visible = (cameraMode !== 'fps');
   }
 
-  // Camera — three modes
+  // Camera — three modes with smooth transitions and wall avoidance
   const bobY = player.y + PLAYER_HEIGHT + Math.sin(walkBob.phase) * 0.15;
+  const _lookTarget = new THREE.Vector3(player.x, player.y + PLAYER_HEIGHT * 0.8, player.z);
+  let _desiredCam = new THREE.Vector3();
+
   if (cameraMode === 'fps') {
-    camera.position.set(player.x, bobY, player.z);
+    _desiredCam.set(player.x, bobY, player.z);
+  } else if (cameraMode === 'shoulder') {
+    // Orbit camera: lookPitch controls elevation, lookYaw controls azimuth, camZoom controls distance
+    const elev = Math.max(0.05, Math.min(1.2, -lookPitch + 0.4)); // map pitch to elevation
+    const hDist = camZoom * Math.cos(elev);
+    const vDist = camZoom * Math.sin(elev);
+    _desiredCam.set(
+      player.x - Math.sin(lookYaw) * hDist,
+      player.y + PLAYER_HEIGHT + vDist,
+      player.z + Math.cos(lookYaw) * hDist
+    );
+  } else if (cameraMode === 'birdseye') {
+    const birdH = camZoom * 3;
+    _desiredCam.set(player.x + 0.1, player.y + birdH, player.z + 0.1);
+  }
+
+  // Camera wall avoidance — sweep from player to desired position, stop before wall
+  if (cameraMode !== 'fps') {
+    const _cp = new THREE.Vector3(player.x, player.y + PLAYER_HEIGHT, player.z);
+    let safeDist = 1.0;
+    const steps = 12;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const tx = _cp.x + (_desiredCam.x - _cp.x) * t;
+      const tz = _cp.z + (_desiredCam.z - _cp.z) * t;
+      if (checkCollision(tx, tz, 0.6)) break;
+      safeDist = t;
+    }
+    if (safeDist < 1.0) {
+      _desiredCam.lerp(_cp, 1.0 - safeDist);
+    }
+  }
+
+  // Smooth camera movement — never jump instantly
+  if (!camInitialized) { camSmooth.copy(_desiredCam); camInitialized = true; }
+  const camLerp = Math.min(1, dt * 6); // smooth follow speed
+  camSmooth.lerp(_desiredCam, camLerp);
+
+  if (cameraMode === 'fps') {
+    camera.position.copy(camSmooth);
     euler.y = -lookYaw;
     euler.x = skyView ? Math.PI / 2 : lookPitch;
     camera.quaternion.setFromEuler(euler);
-  } else if (cameraMode === 'shoulder') {
-    const camDist = 8, camHeight = 4;
-    const camX = player.x - Math.sin(lookYaw) * camDist;
-    const camZ = player.z + Math.cos(lookYaw) * camDist;
-    camera.position.set(camX, player.y + PLAYER_HEIGHT + camHeight, camZ);
-    camera.lookAt(player.x, player.y + PLAYER_HEIGHT * 0.8, player.z);
-  } else if (cameraMode === 'birdseye') {
-    camera.position.set(player.x, player.y + 60, player.z + 1);
-    camera.lookAt(player.x, player.y, player.z);
+  } else {
+    camera.position.copy(camSmooth);
+    camera.lookAt(_lookTarget);
   }
   // Sun/moon are now rendered in the sky dome shader — no billboard positioning needed.
 
