@@ -312,14 +312,15 @@ const skyMat = new THREE.ShaderMaterial({
       float sunDot = dot(normalize(vec3(dir.x, 0.0, dir.z)), normalize(vec3(sunDirection.x, 0.0, sunDirection.z)));
       vec3 hCol = mix(horizonFar, horizonNear, smoothstep(-0.3, 1.0, sunDot));
       col = mix(col, hCol, smoothstep(0.15, 0.0, h) * smoothstep(-0.05, 0.02, h) * 0.8);
-      // Sun glow corona (wide + medium + tight) — replaces billboard sprite
+      // Sun — all additive so the center is always the brightest point in the sky.
+      // Layers from widest/dimmest to sharpest/brightest:
       float sAng = acos(clamp(dot(dir, sunDirection), -1.0, 1.0));
-      col += sunGlowColor * exp(-sAng*sAng*0.8) * sunGlowIntensity * 0.25;
-      col += sunGlowColor * exp(-sAng*sAng*4.0) * sunGlowIntensity * 0.4;
-      col += sunDiscColor * exp(-sAng*sAng*8.0) * sunDiscIntensity * 0.4;
-      // Sun disc
-      float discBlend = smoothstep(sunDiscSize, sunDiscSize*0.5, sAng) * clamp(sunDiscIntensity, 0.0, 1.0);
-      col = mix(col, sunDiscColor * sunDiscIntensity, discBlend);
+      col += sunGlowColor * exp(-sAng*sAng*0.8) * sunGlowIntensity * 0.15;  // wide corona
+      col += sunGlowColor * exp(-sAng*sAng*4.0) * sunGlowIntensity * 0.3;   // medium glow
+      col += sunGlowColor * exp(-sAng*sAng*12.0) * sunGlowIntensity * 0.5;  // tight glow
+      // Disc core — sharp bright center, additive so it always outshines the sky
+      float discMask = smoothstep(sunDiscSize, sunDiscSize*0.4, sAng);
+      col += sunDiscColor * discMask * sunDiscIntensity * 1.5;
       // Moon glow halo — rendered in shader so it never clips
       float moonAng = acos(clamp(dot(dir, moonDirection), -1.0, 1.0));
       float mgRadius = moonDiscSize * moonGlowMult;
@@ -634,9 +635,11 @@ scene.add(camera); // still needed for any future camera children
   skyMat.uniforms.moonTex.value = tex;
 })();
 
-// Load real moon photo and swap into sky shader
+// Load real moon photo and swap into sky shader.
+// Try relative path first (works on GitHub Pages), fall back to west-texas/ subfolder (dev file).
+const _moonUrl = document.location.pathname.includes('west-texas') ? './moon.jpg' : './west-texas/moon.jpg';
 new THREE.TextureLoader().load(
-  './moon.jpg',
+  _moonUrl,
   tex => {
     const c2 = document.createElement('canvas'); c2.width = c2.height = 512;
     const x2 = c2.getContext('2d');
