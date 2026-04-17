@@ -1189,23 +1189,49 @@ function animate() {
   euler.y = -lookYaw;
   euler.x = skyView ? Math.PI / 2 : lookPitch; // sky view forces straight up
   camera.quaternion.setFromEuler(euler);
-  // Sun/moon billboards are camera children — position them in camera space so they're
-  // always within the frustum. Rotate world direction to camera space via inverse quaternion.
+  // Sun/moon billboards: position in camera space + fade out near viewport edge.
+  // GPU rasterization clips plane triangles with a hard straight line; fading to zero
+  // opacity before the disc reaches the edge makes the clip invisible.
   {
-    const _invQ = camera.quaternion.clone().invert();
-    // Sun in camera space
+    const _invQ  = camera.quaternion.clone().invert();
+    // tan of half vertical/horizontal FOV — used to convert camera-space coords to NDC
+    const _tvFOV = Math.tan(camera.fov * Math.PI / 360);
+    const _thFOV = _tvFOV * camera.aspect;
+
+    // ── Sun ──────────────────────────────────────────────────────────────────
     const _sc = _lastSunDir.clone().applyQuaternion(_invQ);
-    const _sunBehind = _sc.z >= 0.0; // z > 0 = behind camera in Three.js camera space
-    sunSprite.visible = !_sunBehind;
-    if (!_sunBehind) sunSprite.position.set(_sc.x*SKY_DIST, _sc.y*SKY_DIST, _sc.z*SKY_DIST);
-    // Moon in camera space
+    if (_sc.z < 0) {                        // in front of camera
+      sunSprite.position.set(_sc.x*SKY_DIST, _sc.y*SKY_DIST, _sc.z*SKY_DIST);
+      // NDC position of sun centre (-1…1 range, 0 = screen centre)
+      const _snx = _sc.x / (-_sc.z) / _thFOV;
+      const _sny = _sc.y / (-_sc.z) / _tvFOV;
+      // Signed distance from disc edge to nearest viewport edge (positive = inside)
+      const _sedge = Math.min(1 - Math.abs(_snx), 1 - Math.abs(_sny));
+      const _sdisc = sunSprite.scale.x * 0.5 / SKY_DIST / _thFOV; // disc NDC radius
+      const _sfade = THREE.MathUtils.clamp((_sedge - _sdisc) / 0.12, 0, 1);
+      sunSprite.visible = _sfade > 0.001;
+      sunSpriteMat.opacity *= _sfade;       // applyContinuousTime set base; we scale it
+    } else {
+      sunSprite.visible = false;
+    }
+
+    // ── Moon + glow ──────────────────────────────────────────────────────────
     const _mc = _lastMoonDir.clone().applyQuaternion(_invQ);
-    const _moonBehind = _mc.z >= 0.0;
-    moonSprite.visible = !_moonBehind;
-    moonGlowSprite.visible = !_moonBehind;
-    if (!_moonBehind) {
+    if (_mc.z < 0) {                        // in front of camera
       moonSprite.position.set(_mc.x*SKY_DIST, _mc.y*SKY_DIST, _mc.z*SKY_DIST);
       moonGlowSprite.position.set(_mc.x*(SKY_DIST-10), _mc.y*(SKY_DIST-10), _mc.z*(SKY_DIST-10));
+      const _mnx = _mc.x / (-_mc.z) / _thFOV;
+      const _mny = _mc.y / (-_mc.z) / _tvFOV;
+      const _medge = Math.min(1 - Math.abs(_mnx), 1 - Math.abs(_mny));
+      const _mdisc = moonSprite.scale.x * 0.5 / SKY_DIST / _thFOV;
+      const _mfade = THREE.MathUtils.clamp((_medge - _mdisc) / 0.12, 0, 1);
+      moonSprite.visible = _mfade > 0.001;
+      moonGlowSprite.visible = _mfade > 0.001;
+      moonSpriteMat.opacity *= _mfade;
+      moonGlowMat.opacity   *= _mfade;
+    } else {
+      moonSprite.visible = false;
+      moonGlowSprite.visible = false;
     }
   }
 
