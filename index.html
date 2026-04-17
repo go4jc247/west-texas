@@ -288,6 +288,7 @@ const skyMat = new THREE.ShaderMaterial({
     moonGlowIntensity: { value: 0.45 },
     moonGlowMult: { value: 1.2 },
     moonTex: { value: null },
+    resolution: { value: new THREE.Vector2(innerWidth, innerHeight) },
   },
   vertexShader: `
     varying vec3 vWorldDir;
@@ -303,38 +304,51 @@ const skyMat = new THREE.ShaderMaterial({
     uniform vec3 moonDirection, moonDiscColor, moonGlowColor;
     uniform float moonDiscSize, moonDiscIntensity, moonGlowIntensity, moonGlowMult;
     uniform sampler2D moonTex;
+    uniform vec2 resolution;
     varying vec3 vWorldDir;
     void main() {
       vec3 dir = normalize(vWorldDir);
       float h = dir.y;
       vec3 col = mix(bottomColor, midColor, smoothstep(0.0, 0.15, h));
       col = mix(col, topColor, smoothstep(0.15, 0.7, h));
+      // Horizon tint (angular — smooth gradient, distortion not visible)
       float sunDot = dot(normalize(vec3(dir.x, 0.0, dir.z)), normalize(vec3(sunDirection.x, 0.0, sunDirection.z)));
       vec3 hCol = mix(horizonFar, horizonNear, smoothstep(-0.3, 1.0, sunDot));
       col = mix(col, hCol, smoothstep(0.15, 0.0, h) * smoothstep(-0.05, 0.02, h) * 0.8);
-      // Sun — all additive so the center is always the brightest point in the sky.
-      // Layers from widest/dimmest to sharpest/brightest:
-      float sAng = acos(clamp(dot(dir, sunDirection), -1.0, 1.0));
-      col += sunGlowColor * exp(-sAng*sAng*0.8) * sunGlowIntensity * 0.15;  // wide corona
-      col += sunGlowColor * exp(-sAng*sAng*4.0) * sunGlowIntensity * 0.3;   // medium glow
-      col += sunGlowColor * exp(-sAng*sAng*12.0) * sunGlowIntensity * 0.5;  // tight glow
-      // Disc core — sharp bright center, additive so it always outshines the sky
-      float discMask = smoothstep(sunDiscSize, sunDiscSize*0.4, sAng);
-      col += sunDiscColor * discMask * sunDiscIntensity * 1.5;
-      // Moon glow halo — rendered in shader so it never clips
-      float moonAng = acos(clamp(dot(dir, moonDirection), -1.0, 1.0));
-      float mgRadius = moonDiscSize * moonGlowMult;
-      col += moonGlowColor * exp(-moonAng*moonAng / (mgRadius*mgRadius*0.5)) * moonDiscIntensity * moonGlowIntensity * 0.25;
-      // Moon disc — texture-mapped from moonTex
-      float moonEdge = smoothstep(moonDiscSize * 1.02, moonDiscSize * 0.94, moonAng);
-      if (moonEdge > 0.0 && moonDiscIntensity > 0.001) {
-        vec3 mAxis  = normalize(moonDirection);
-        vec3 tempUp = (abs(mAxis.y) < 0.95) ? vec3(0.0,1.0,0.0) : vec3(0.0,0.0,1.0);
-        vec3 mRight = normalize(cross(mAxis, tempUp));
-        vec3 mUp2   = normalize(cross(mRight, mAxis));
-        float mu = dot(dir, mRight) / moonDiscSize;
-        float mv = dot(dir, mUp2)   / moonDiscSize;
-        vec2 moonUV = clamp(vec2(mu, -mv) * 0.5 + 0.5, 0.0, 1.0);
+
+      // === SUN — screen-space rendering for distortion-free circles ===
+      // Project sun center to pixel coords
+      vec4 _sClip = projectionMatrix * viewMatrix * vec4(cameraPosition + sunDirection * 5000.0, 1.0);
+      float _sVis = step(0.001, _sClip.w); // 0 if behind camera
+      vec2 _sPx = (_sClip.xy / _sClip.w * 0.5 + 0.5) * resolution;
+      float _sDist = length(gl_FragCoord.xy - _sPx);
+      // Disc radius in pixels: angular size → pixels via projection focal length
+      float _sDiscPx = sunDiscSize * projectionMatrix[1][1] * resolution.y * 0.5;
+      float sn = _sDist / max(_sDiscPx, 1.0); // normalized: 0=center, 1=disc edge
+      // Glow layers (additive, widest to tightest)
+      col += sunGlowColor * exp(-sn*sn*0.0007) * sunGlowIntensity * 0.15 * _sVis;
+      col += sunGlowColor * exp(-sn*sn*0.004)  * sunGlowIntensity * 0.3  * _sVis;
+      col += sunGlowColor * exp(-sn*sn*0.012)  * sunGlowIntensity * 0.5  * _sVis;
+      // Disc core (additive — always brightest point)
+      float discMask = smoothstep(1.1, 0.4, sn);
+      col += sunDiscColor * discMask * sunDiscIntensity * 1.5 * _sVis;
+
+      // === MOON — screen-space rendering ===
+      vec4 _mClip = projectionMatrix * viewMatrix * vec4(cameraPosition + moonDirection * 5000.0, 1.0);
+      float _mVis = step(0.001, _mClip.w);
+      vec2 _mPx = (_mClip.xy / _mClip.w * 0.5 + 0.5) * resolution;
+      float _mDist = length(gl_FragCoord.xy - _mPx);
+      float _mDiscPx = moonDiscSize * projectionMatrix[1][1] * resolution.y * 0.5;
+      float mn = _mDist / max(_mDiscPx, 1.0);
+      // Glow halo
+      float _mgPx = _mDiscPx * moonGlowMult;
+      float mgn = _mDist / max(_mgPx, 1.0);
+      col += moonGlowColor * exp(-mgn*mgn*0.5) * moonDiscIntensity * moonGlowIntensity * 0.25 * _mVis;
+      // Moon disc — texture mapped using screen-space UV
+      float moonEdge = smoothstep(1.05, 0.94, mn);
+      if (moonEdge > 0.0 && moonDiscIntensity > 0.001 && _mVis > 0.0) {
+        vec2 moonOff = (gl_FragCoord.xy - _mPx) / _mDiscPx;
+        vec2 moonUV = clamp(vec2(moonOff.x, -moonOff.y) * 0.5 + 0.5, 0.0, 1.0);
         vec4 mt = texture2D(moonTex, moonUV);
         col = mix(col, mt.rgb * moonDiscColor, moonEdge * moonDiscIntensity * mt.a);
       }
@@ -1211,6 +1225,7 @@ window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  skyMat.uniforms.resolution.value.set(innerWidth, innerHeight);
 });
 </script>
 </body>
