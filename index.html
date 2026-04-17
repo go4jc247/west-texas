@@ -57,7 +57,7 @@ canvas { display: block; }
 <div id="overlay" onclick="startGame()">
   <div>
     West Texas <small style="font-size:14px;opacity:0.6">environment</small>
-    <span>Click to enter<br>W/S — forward/back &nbsp; A/D — turn<br>Mouse — look around &nbsp; Shift — run &nbsp; hold +/- — fast-forward/rewind time<br>L — constellation lines &nbsp; H — tweaks panel</span>
+    <span>Click to enter<br>W/S — forward/back &nbsp; A/D — turn &nbsp; Mouse — look &nbsp; Shift — run<br>1 — first person &nbsp; 2 — over shoulder &nbsp; 3 — bird's eye<br>+/- — time &nbsp; L — constellations &nbsp; H — tweaks</span>
   </div>
 </div>
 <div id="crosshair"></div>
@@ -1151,13 +1151,14 @@ for (const b of buildingPositions) {
   const x = b.nx * WORLD_SIZE - HALF;
   const z = b.nz * WORLD_SIZE - HALF;
   if (b.id === 1) {
-    // Replace building 1 with the western town
     const townMesh = makeWesternTown();
     addWrapObject(x, z, townMesh, 3000);
-    // 6-foot man standing in the street for scale
-    const scaleMan = makeScaleMan();
-    scaleMan.position.set(0, 0, 0); // will be positioned by addWrapObject
-    addWrapObject(x + 5, z + 3, scaleMan, 3000);
+    initTownColliders(x, z);
+    // Player avatar — 6-foot cowboy. Positioned each frame in animate loop.
+    playerManMesh = makeScaleMan();
+    scene.add(playerManMesh);
+    // Start player near the town
+    player.x = x + 5; player.z = z + 3;
   } else {
     const mesh = makeBuilding(b.color);
     addWrapObject(x, z, mesh, 3000);
@@ -1168,11 +1169,89 @@ for (const b of buildingPositions) {
 // ============================================================
 // PLAYER STATE — plain 2D: x, z, yaw. That's it.
 // ============================================================
-const player = { x: 0, z: 100, yaw: 0 }; // start just south of the crossroads
+const player = { x: 0, z: 100, yaw: 0, y: 0 }; // start just south of crossroads
 let lookYaw = 0, lookPitch = 0;
 const keys = {};
 let locked = false;
-let skyView = false; // V key: overhead fisheye look at the full sky dome
+let skyView = false;
+let cameraMode = 'fps'; // 'fps', 'shoulder', 'birdseye' — cycle with 1/2/3 keys
+let playerManMesh = null; // reference to the character mesh
+
+// Collision system — AABBs in world space, computed from town layout
+const colliders = []; // [{cx, cz, hw, hd, h}] — center, half-width, half-depth, height
+let townOriginX = 0, townOriginZ = 0;
+
+// Boardwalk zones — [{cx, cz, hw, hd, height}] in world space
+const boardwalkZones = [];
+
+function initTownColliders(tx, tz) {
+  townOriginX = tx; townOriginZ = tz;
+  const S = 1.5; // town scale
+  const STREET_W = 20, BOARD_W = 4, BOARD_H = 1.0;
+
+  // North side buildings
+  const northDefs = [
+    { w:12, d:16, x:-30 }, { w:14, d:18, x:-15 }, { w:8, d:14, x:-4 },
+    { w:14, d:16, x:9 },   { w:8, d:12, x:20 },   { w:14, d:20, x:32 },
+  ];
+  for (const b of northDefs) {
+    colliders.push({
+      cx: tx + b.x * S, cz: tz + (STREET_W/2 + BOARD_W + b.d/2) * S,
+      hw: b.w/2 * S, hd: b.d/2 * S, h: 20
+    });
+  }
+  // South side buildings
+  const southDefs = [
+    { w:10, d:14, x:-27 }, { w:12, d:16, x:-14 }, { w:8, d:12, x:-4 },
+    { w:10, d:14, x:7 },   { w:10, d:16, x:18 },   { w:10, d:16, x:29 },
+  ];
+  for (const b of southDefs) {
+    colliders.push({
+      cx: tx + b.x * S, cz: tz - (STREET_W/2 + BOARD_W + b.d/2) * S,
+      hw: b.w/2 * S, hd: b.d/2 * S, h: 20
+    });
+  }
+  // Porch posts (both sides)
+  const townLen = 80;
+  for (let px = -townLen/2 + 3; px <= townLen/2 - 3; px += 6) {
+    for (const side of [1, -1]) {
+      const zOff = side * (STREET_W/2 + BOARD_W/2 - 0.3);
+      colliders.push({
+        cx: tx + px * S, cz: tz + zOff * S,
+        hw: 0.3 * S, hd: 0.3 * S, h: 10
+      });
+    }
+  }
+  // Boardwalk zones (both sides)
+  const bwH = BOARD_H * S; // boardwalk height in world units
+  boardwalkZones.push({
+    cx: tx, cz: tz + (STREET_W/2 + BOARD_W/2) * S,
+    hw: townLen/2 * S, hd: BOARD_W/2 * S, height: bwH
+  });
+  boardwalkZones.push({
+    cx: tx, cz: tz - (STREET_W/2 + BOARD_W/2) * S,
+    hw: townLen/2 * S, hd: BOARD_W/2 * S, height: bwH
+  });
+}
+
+function checkCollision(nx, nz, radius) {
+  // radius = player body radius for AABB expansion
+  for (const c of colliders) {
+    const dx = wrapDelta(c.cx, nx);
+    const dz = wrapDelta(c.cz, nz);
+    if (Math.abs(dx) < c.hw + radius && Math.abs(dz) < c.hd + radius) return true;
+  }
+  return false;
+}
+
+function getGroundHeight(px, pz) {
+  for (const b of boardwalkZones) {
+    const dx = wrapDelta(b.cx, px);
+    const dz = wrapDelta(b.cz, pz);
+    if (Math.abs(dx) < b.hw && Math.abs(dz) < b.hd) return b.height;
+  }
+  return 0;
+}
 
 // ============================================================
 // TWEAKS — Tab cycles selection, - / = adjusts, buttons also work
@@ -1257,6 +1336,10 @@ document.addEventListener('keydown', e => {
   }
   // C: toggle real-clock sync
   if (e.code === 'KeyC') { SYNC_CLOCK = !SYNC_CLOCK; refreshTweaks(); }
+  // 1/2/3: camera modes
+  if (e.code === 'Digit1') cameraMode = 'fps';
+  if (e.code === 'Digit2') cameraMode = 'shoulder';
+  if (e.code === 'Digit3') cameraMode = 'birdseye';
   // L: toggle constellation lines + labels
   if (e.code === 'KeyL') {
     constellationsVisible = !constellationsVisible;
@@ -1539,14 +1622,16 @@ function animate() {
     if (keys['KeyW'] || keys['ArrowUp']) moveAmount += 1;
     if (keys['KeyS'] || keys['ArrowDown']) moveAmount -= 1;
     if (moveAmount !== 0) {
-      // Camera forward in world XZ: at lookYaw=0, forward is -Z.
-      // (Three.js rotates forward (0,0,-1) by euler.y=-lookYaw → (sin yaw, 0, -cos yaw).)
       const fx = Math.sin(lookYaw);
       const fz = -Math.cos(lookYaw);
       const step = moveAmount * speed * dt;
-      player.x += fx * step;
-      player.z += fz * step;
-      // Wrap to [-HALF, HALF) — track when a wrap occurs so we can suppress that frame's render
+      const BODY_R = 0.8; // player body collision radius
+      // Try X and Z independently for wall sliding
+      const nx = player.x + fx * step;
+      const nz = player.z + fz * step;
+      if (!checkCollision(nx, player.z, BODY_R)) player.x = nx;
+      if (!checkCollision(player.x, nz, BODY_R)) player.z = nz;
+      // Wrap
       const _px0 = player.x, _pz0 = player.z;
       player.x = ((player.x + HALF) % WORLD_SIZE + WORLD_SIZE) % WORLD_SIZE - HALF;
       player.z = ((player.z + HALF) % WORLD_SIZE + WORLD_SIZE) % WORLD_SIZE - HALF;
@@ -1555,12 +1640,34 @@ function animate() {
     }
   }
 
-  // Camera rides on the player's world position. Bob for walking feel.
-  const bobY = PLAYER_HEIGHT + Math.sin(walkBob.phase) * 0.2;
-  camera.position.set(player.x, bobY, player.z);
-  euler.y = -lookYaw;
-  euler.x = skyView ? Math.PI / 2 : lookPitch; // sky view forces straight up
-  camera.quaternion.setFromEuler(euler);
+  // Ground height — step up onto boardwalk
+  const targetY = getGroundHeight(player.x, player.z);
+  player.y += (targetY - player.y) * Math.min(1, dt * 12); // smooth step
+
+  // Position the player avatar
+  if (playerManMesh) {
+    playerManMesh.position.set(player.x, player.y, player.z);
+    playerManMesh.rotation.y = -lookYaw + Math.PI; // face forward
+    playerManMesh.visible = (cameraMode !== 'fps');
+  }
+
+  // Camera — three modes
+  const bobY = player.y + PLAYER_HEIGHT + Math.sin(walkBob.phase) * 0.15;
+  if (cameraMode === 'fps') {
+    camera.position.set(player.x, bobY, player.z);
+    euler.y = -lookYaw;
+    euler.x = skyView ? Math.PI / 2 : lookPitch;
+    camera.quaternion.setFromEuler(euler);
+  } else if (cameraMode === 'shoulder') {
+    const camDist = 8, camHeight = 4;
+    const camX = player.x - Math.sin(lookYaw) * camDist;
+    const camZ = player.z + Math.cos(lookYaw) * camDist;
+    camera.position.set(camX, player.y + PLAYER_HEIGHT + camHeight, camZ);
+    camera.lookAt(player.x, player.y + PLAYER_HEIGHT * 0.8, player.z);
+  } else if (cameraMode === 'birdseye') {
+    camera.position.set(player.x, player.y + 60, player.z + 1);
+    camera.lookAt(player.x, player.y, player.z);
+  }
   // Sun/moon are now rendered in the sky dome shader — no billboard positioning needed.
 
   // Sky, stars, mountains all ride along with the camera.
