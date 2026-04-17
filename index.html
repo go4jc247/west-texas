@@ -735,10 +735,10 @@ function applyContinuousTime(dt) {
   moonGlowSprite.scale.set(MOON_SIZE * MOON_GLOW_MULT, MOON_SIZE * MOON_GLOW_MULT, 1);
 
   moonSpriteMat.opacity = moonVis;
-  // MOON_BRIGHT: 0–1 dims the cream color, above 1 pushes toward pure white
-  const mb = Math.min(MOON_BRIGHT, 1.0);
-  const mbOver = Math.max(0, MOON_BRIGHT - 1.0);
-  moonSpriteMat.color.setRGB(mb + mbOver, mb + mbOver * 0.97, mb + mbOver * 0.92);
+  // MOON_BRIGHT is a pure exposure multiplier applied directly to the texture pixels.
+  // 0=off, 1=photo as-is, 2=double exposure. ACESFilmic tone mapping handles >1
+  // gracefully — highlights compress naturally, detail is preserved, never just white.
+  moonSpriteMat.color.setScalar(MOON_BRIGHT);
   moonGlowMat.opacity = moonVis * MOON_GLOW_OP * MOON_BRIGHT;
 
   // Moon directional light: cool blue, casts shadows at night
