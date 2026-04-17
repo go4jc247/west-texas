@@ -843,15 +843,14 @@ function makeBuilding(color) {
 // WESTERN TOWN — replaces building 1
 // Street runs along X axis. North side (+Z) and south side (-Z).
 // ============================================================
-function _makeSignTex(text, bg, fg) {
+function _makeSignTex(text, bg, fg, border) {
   const c = document.createElement('canvas'); c.width = 512; c.height = 128;
   const ctx = c.getContext('2d');
   ctx.fillStyle = bg; ctx.fillRect(0,0,512,128);
-  // Slightly worn border
-  ctx.strokeStyle = fg; ctx.lineWidth = 3;
-  ctx.strokeRect(8,8,496,112);
+  ctx.strokeStyle = border || fg; ctx.lineWidth = 4;
+  ctx.strokeRect(6,6,500,116);
   ctx.fillStyle = fg;
-  ctx.font = 'bold 52px Georgia, serif';
+  ctx.font = 'bold 48px Georgia, serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(text, 256, 68);
   return new THREE.CanvasTexture(c);
@@ -859,10 +858,13 @@ function _makeSignTex(text, bg, fg) {
 
 function makeWesternTown() {
   const town = new THREE.Group();
-  const STREET_W = 18;  // street width (curb to curb)
-  const BOARD_W = 3.5;  // boardwalk width
-  const BOARD_H = 0.6;  // boardwalk height above ground
-  const PORCH_H = 4.2;  // porch roof height
+  // All dimensions in pre-scale units. Town is scaled 1.5× at the end.
+  // After scale: door = 7 ft, 6-ft man fits comfortably.
+  const STREET_W = 20;  // street width (curb to curb)
+  const BOARD_W = 4;    // boardwalk width
+  const BOARD_H = 1.0;  // boardwalk height (≈1.5 ft after scale)
+  const PORCH_H = 6.5;  // porch roof height (≈9.75 ft after scale)
+  const DOOR_H = 4.67;  // door height (= 7 ft after 1.5× scale)
 
   // Shared materials
   const _wm = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.92 });
@@ -907,36 +909,38 @@ function makeWesternTown() {
     roof.receiveShadow = true; roof.castShadow = true;
     g.add(roof);
 
-    // Front door
-    const door = new THREE.Mesh(new THREE.BoxGeometry(2.2, 4.2, 0.15), doorMat);
-    door.position.set(opts.doorX || 0, 2.1, d / 2 + 0.08);
+    // Front door — bottom at boardwalk level (BOARD_H)
+    const _dx = opts.doorX || 0;
+    const _doorBot = BOARD_H;
+    const door = new THREE.Mesh(new THREE.BoxGeometry(2.4, DOOR_H, 0.15), doorMat);
+    door.position.set(_dx, _doorBot + DOOR_H / 2, d / 2 + 0.08);
     g.add(door);
     // Door frame
-    const dfL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.4, 0.2), frameMat);
-    dfL.position.set((opts.doorX || 0) - 1.2, 2.2, d / 2 + 0.1);
-    const dfR = dfL.clone(); dfR.position.x = (opts.doorX || 0) + 1.2;
-    const dfT = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.2, 0.2), frameMat);
-    dfT.position.set(opts.doorX || 0, 4.3, d / 2 + 0.1);
+    const _dfH = DOOR_H + 0.3;
+    const dfL = new THREE.Mesh(new THREE.BoxGeometry(0.2, _dfH, 0.2), frameMat);
+    dfL.position.set(_dx - 1.3, _doorBot + _dfH / 2, d / 2 + 0.1);
+    const dfR = dfL.clone(); dfR.position.x = _dx + 1.3;
+    const dfT = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.25, 0.2), frameMat);
+    dfT.position.set(_dx, _doorBot + DOOR_H + 0.15, d / 2 + 0.1);
     g.add(dfL, dfR, dfT);
 
-    // Windows — evenly spaced on front face
+    // Windows — evenly spaced on front face, centered between door-top and porch
+    const _winY = BOARD_H + DOOR_H * 0.65; // window center height
     const winCount = opts.wins || Math.max(1, Math.floor(w / 5) - 1);
     const winSpacing = w / (winCount + 1);
     for (let i = 1; i <= winCount; i++) {
       const wx = -w / 2 + winSpacing * i;
-      if (Math.abs(wx - (opts.doorX || 0)) < 2) continue; // skip if overlaps door
+      if (Math.abs(wx - _dx) < 2.5) continue; // skip if overlaps door
       const win = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.2, 0.12), winMat);
-      win.position.set(wx, wH * 0.6, d / 2 + 0.08);
+      win.position.set(wx, _winY, d / 2 + 0.08);
       g.add(win);
-      // Window frame
       const wf = new THREE.Mesh(new THREE.BoxGeometry(1.9, 2.5, 0.08), frameMat);
-      wf.position.set(wx, wH * 0.6, d / 2 + 0.04);
+      wf.position.set(wx, _winY, d / 2 + 0.04);
       g.add(wf);
-      // Shutters
       if (opts.shutters !== false) {
         const shMat = _wm(opts.paint || 0x5A4A3A);
         const shL = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2.4, 0.08), shMat);
-        shL.position.set(wx - 1.25, wH * 0.6, d / 2 + 0.06);
+        shL.position.set(wx - 1.25, _winY, d / 2 + 0.06);
         const shR = shL.clone(); shR.position.x = wx + 1.25;
         g.add(shL, shR);
       }
@@ -974,14 +978,16 @@ function makeWesternTown() {
       }
     }
 
-    // Sign on false front
+    // Sign on false front — each gets unique colors from opts.signBg/signFg
     if (signText) {
-      const sBg = opts.paint ? '#' + opts.paint.toString(16).padStart(6,'0') : '#6B5B45';
-      const sTex = _makeSignTex(signText, sBg, '#E8D5B0');
-      const sMat = new THREE.MeshBasicMaterial({ map: sTex, transparent: true });
-      const sW = Math.min(w * 0.85, 8);
-      const sign = new THREE.Mesh(new THREE.PlaneGeometry(sW, sW * 0.25), sMat);
-      sign.position.set(0, fH - 1.2, d / 2 + 0.25);
+      const sBg = opts.signBg || '#4A3828';
+      const sFg = opts.signFg || '#E8D5B0';
+      const sBorder = opts.signBorder || sFg;
+      const sTex = _makeSignTex(signText, sBg, sFg, sBorder);
+      const sMat = new THREE.MeshBasicMaterial({ map: sTex });
+      const sW = Math.min(w * 0.85, 9);
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(sW, sW * 0.22), sMat);
+      sign.position.set(0, fH - 1.5, d / 2 + 0.25);
       g.add(sign);
     }
 
@@ -1017,12 +1023,12 @@ function makeWesternTown() {
 
   // --- North side buildings (face south, toward -Z) ---
   const northDefs = [
-    { w:12, d:16, wH:8, fH:11, c:0xA09070, s:'GENERAL STORE', x:-30, o:{ doorX: 0 }},
-    { w:14, d:18, wH:14,fH:17, c:0x8B6B4A, s:'SALOON',        x:-15, o:{ paint:0x8B4040, balcony:true, secondFloor:true }},
-    { w: 8, d:14, wH:7, fH:10, c:0x7A6A50, s:'SHERIFF',       x: -4, o:{ wins:1 }},
-    { w:14, d:16, wH:14,fH:17, c:0xC8B888, s:'HOTEL',         x: 9,  o:{ paint:0x6A5A48, secondFloor:true, balcony:true }},
-    { w: 8, d:12, wH:7, fH:10, c:0x6B5B45, s:'BARBER',        x: 20, o:{ wins:1 }},
-    { w:14, d:20, wH:6, fH: 8, c:0x8B7355, s:'LIVERY STABLE', x: 32, o:{ shutters:false, doorX:0 }},
+    { w:12, d:16, wH:9, fH:12, c:0xA09070, s:'GENERAL STORE', x:-30, o:{ signBg:'#3A2818', signFg:'#F0E0B0' }},
+    { w:14, d:18, wH:15,fH:18, c:0x8B6B4A, s:'SALOON',        x:-15, o:{ paint:0x8B4040, balcony:true, secondFloor:true, signBg:'#6A1818', signFg:'#FFD700', signBorder:'#B8860B' }},
+    { w: 8, d:14, wH:8, fH:11, c:0x7A6A50, s:'SHERIFF',       x: -4, o:{ wins:1, signBg:'#2A3A2A', signFg:'#D0C8A0' }},
+    { w:14, d:16, wH:15,fH:18, c:0xC8B888, s:'HOTEL',         x: 9,  o:{ paint:0x6A5A48, secondFloor:true, balcony:true, signBg:'#1A1A3A', signFg:'#F8F0D0', signBorder:'#C8B070' }},
+    { w: 8, d:12, wH:8, fH:11, c:0x6B5B45, s:'BARBER',        x: 20, o:{ wins:1, signBg:'#FFFFFF', signFg:'#2A1A0A', signBorder:'#CC3333' }},
+    { w:14, d:20, wH:7, fH: 9, c:0x8B7355, s:'LIVERY STABLE', x: 32, o:{ shutters:false, signBg:'#4A3A1A', signFg:'#C8B888' }},
   ];
   for (const b of northDefs) {
     const m = bldg(b.w, b.d, b.wH, b.fH, b.c, b.s, b.o || {});
@@ -1033,12 +1039,12 @@ function makeWesternTown() {
 
   // --- South side buildings (face north, toward +Z) ---
   const southDefs = [
-    { w:10, d:14, wH:8, fH:11, c:0x7A6A50, s:'BANK',         x:-27, o:{ paint:0x5A5A58, wins:1 }},
-    { w:12, d:16, wH:8, fH:12, c:0x8B7355, s:'DRY GOODS',    x:-14, o:{ paint:0x5A6B50 }},
-    { w: 8, d:12, wH:7, fH:10, c:0xA09070, s:'ASSAY OFFICE', x: -4, o:{ wins:1 }},
-    { w:10, d:14, wH:8, fH:11, c:0x6B5B45, s:'BLACKSMITH',   x:  7, o:{ shutters:false }},
-    { w:10, d:16, wH:8, fH:12, c:0x8B6B4A, s:'FEED & SEED',  x: 18, o:{}},
-    { w:10, d:16, wH:7, fH: 9, c:0x8B7355, s:'UNDERTAKER',   x: 29, o:{ paint:0x3A3A38 }},
+    { w:10, d:14, wH:9, fH:12, c:0x7A6A50, s:'BANK',         x:-27, o:{ paint:0x5A5A58, wins:1, signBg:'#2A2A28', signFg:'#C8A848', signBorder:'#8A7A40' }},
+    { w:12, d:16, wH:9, fH:13, c:0x8B7355, s:'DRY GOODS',    x:-14, o:{ paint:0x5A6B50, signBg:'#2A3A20', signFg:'#E8E0C0' }},
+    { w: 8, d:12, wH:8, fH:11, c:0xA09070, s:'ASSAY OFFICE', x: -4, o:{ wins:1, signBg:'#3A2A1A', signFg:'#D8C8A0' }},
+    { w:10, d:14, wH:9, fH:12, c:0x6B5B45, s:'BLACKSMITH',   x:  7, o:{ shutters:false, signBg:'#1A1A1A', signFg:'#CC6600', signBorder:'#884400' }},
+    { w:10, d:16, wH:9, fH:13, c:0x8B6B4A, s:'FEED & SEED',  x: 18, o:{ signBg:'#3A2818', signFg:'#B8D888' }},
+    { w:10, d:16, wH:8, fH:10, c:0x8B7355, s:'UNDERTAKER',   x: 29, o:{ paint:0x3A3A38, signBg:'#1A1A1A', signFg:'#888888', signBorder:'#555555' }},
   ];
   for (const b of southDefs) {
     const m = bldg(b.w, b.d, b.wH, b.fH, b.c, b.s, b.o || {});
@@ -1086,7 +1092,58 @@ function makeWesternTown() {
     town.add(crate);
   }
 
+  // Scale entire town up 1.5× — after this, DOOR_H (4.67) becomes 7.0 game units = 7 feet
+  town.scale.set(1.5, 1.5, 1.5);
+
   return town;
+}
+
+// 6-foot man character for scale reference — stands near the town entrance
+function makeScaleMan() {
+  const man = new THREE.Group();
+  const MAN_H = 6; // 6 game units = 6 feet (since 1 game unit ≈ 1 foot after town scale)
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xC8A882, roughness: 0.8 });
+  const shirtMat = new THREE.MeshStandardMaterial({ color: 0x5A4A3A, roughness: 0.85 });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: 0x3A3028, roughness: 0.85 });
+  const hatMat = new THREE.MeshStandardMaterial({ color: 0x4A3A28, roughness: 0.8 });
+  const bootMat = new THREE.MeshStandardMaterial({ color: 0x2A1A0A, roughness: 0.9 });
+  // Head
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 8, 8), skinMat);
+  head.position.y = MAN_H - 0.45;
+  head.castShadow = true;
+  man.add(head);
+  // Hat (wide brim cowboy hat)
+  const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.75, 0.08, 12), hatMat);
+  hatBrim.position.y = MAN_H - 0.15;
+  man.add(hatBrim);
+  const hatCrown = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.38, 0.4, 8), hatMat);
+  hatCrown.position.y = MAN_H + 0.1;
+  hatCrown.castShadow = true;
+  man.add(hatCrown);
+  // Torso (shirt)
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.4, 0.5), shirtMat);
+  torso.position.y = MAN_H - 1.6;
+  torso.castShadow = true;
+  man.add(torso);
+  // Arms
+  for (const side of [-0.55, 0.55]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.3, 0.25), shirtMat);
+    arm.position.set(side, MAN_H - 1.7, 0);
+    arm.castShadow = true;
+    man.add(arm);
+  }
+  // Legs (pants)
+  for (const side of [-0.2, 0.2]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.6, 0.35), pantsMat);
+    leg.position.set(side, MAN_H - 3.2, 0);
+    leg.castShadow = true;
+    man.add(leg);
+    // Boots
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.5, 0.45), bootMat);
+    boot.position.set(side, 0.25, 0.05);
+    man.add(boot);
+  }
+  return man;
 }
 
 const buildingDots = [];
@@ -1097,6 +1154,10 @@ for (const b of buildingPositions) {
     // Replace building 1 with the western town
     const townMesh = makeWesternTown();
     addWrapObject(x, z, townMesh, 3000);
+    // 6-foot man standing in the street for scale
+    const scaleMan = makeScaleMan();
+    scaleMan.position.set(0, 0, 0); // will be positioned by addWrapObject
+    addWrapObject(x + 5, z + 3, scaleMan, 3000);
   } else {
     const mesh = makeBuilding(b.color);
     addWrapObject(x, z, mesh, 3000);
