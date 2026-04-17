@@ -332,6 +332,7 @@ const sunSpriteMat = new THREE.SpriteMaterial({
 });
 const sunSprite = new THREE.Sprite(sunSpriteMat);
 sunSprite.scale.set(500, 500, 1);
+sunSprite.frustumCulled = false; // prevent clipping when sun is near frustum edge
 scene.add(sunSprite);
 
 // ============================================================
@@ -395,6 +396,7 @@ new THREE.TextureLoader().load(
 );
 const moonSprite = new THREE.Sprite(moonSpriteMat);
 moonSprite.scale.set(700, 700, 1);
+moonSprite.frustumCulled = false; // prevent clipping near frustum edge
 scene.add(moonSprite);
 
 // White additive glow — makes moon look like a bright white ball when high in sky.
@@ -422,6 +424,7 @@ const moonGlowMat = new THREE.SpriteMaterial({
 const moonGlowSprite = new THREE.Sprite(moonGlowMat);
 moonGlowSprite.scale.set(820, 820, 1);
 moonGlowSprite.renderOrder = 1;
+moonGlowSprite.frustumCulled = false;
 scene.add(moonGlowSprite);
 
 // ============================================================
@@ -544,6 +547,7 @@ const player = { x: 0, z: 100, yaw: 0 }; // start just south of the crossroads
 let lookYaw = 0, lookPitch = 0;
 const keys = {};
 let locked = false;
+let skyView = false; // V key: overhead fisheye look at the full sky dome
 
 // ============================================================
 // TWEAKS — Tab cycles selection, - / = adjusts, buttons also work
@@ -601,6 +605,13 @@ document.addEventListener('keydown', e => {
   // = key (no shift needed) increases, - key decreases the selected param
   if (e.code === 'Equal')  { adjustTweak(TWEAK_LIST[selectedTweakIdx],  1); }
   if (e.code === 'Minus')  { adjustTweak(TWEAK_LIST[selectedTweakIdx], -1); }
+  // V: toggle overhead sky view — 140° FOV looking straight up
+  if (e.code === 'KeyV') {
+    skyView = !skyView;
+    camera.fov = skyView ? 140 : 75;
+    camera.updateProjectionMatrix();
+    if (!skyView) lookPitch = 0; // restore level look on exit
+  }
   if (locked) e.preventDefault();
 });
 document.addEventListener('keyup', e => keys[e.code] = false);
@@ -879,7 +890,7 @@ function animate() {
   const bobY = PLAYER_HEIGHT + Math.sin(walkBob.phase) * 0.2;
   camera.position.set(player.x, bobY, player.z);
   euler.y = -lookYaw;
-  euler.x = lookPitch;
+  euler.x = skyView ? Math.PI / 2 : lookPitch; // sky view forces straight up
   camera.quaternion.setFromEuler(euler);
 
   // Sky, stars, mountains all ride along with the camera.
