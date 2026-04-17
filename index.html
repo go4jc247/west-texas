@@ -839,12 +839,268 @@ function makeBuilding(color) {
   return g;
 }
 
+// ============================================================
+// WESTERN TOWN — replaces building 1
+// Street runs along X axis. North side (+Z) and south side (-Z).
+// ============================================================
+function _makeSignTex(text, bg, fg) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = bg; ctx.fillRect(0,0,512,128);
+  // Slightly worn border
+  ctx.strokeStyle = fg; ctx.lineWidth = 3;
+  ctx.strokeRect(8,8,496,112);
+  ctx.fillStyle = fg;
+  ctx.font = 'bold 52px Georgia, serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, 256, 68);
+  return new THREE.CanvasTexture(c);
+}
+
+function makeWesternTown() {
+  const town = new THREE.Group();
+  const STREET_W = 18;  // street width (curb to curb)
+  const BOARD_W = 3.5;  // boardwalk width
+  const BOARD_H = 0.6;  // boardwalk height above ground
+  const PORCH_H = 4.2;  // porch roof height
+
+  // Shared materials
+  const _wm = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.92 });
+  const boardMat = _wm(0x8B7355);
+  const postMat  = _wm(0x6B5B45);
+  const roofMat  = _wm(0x7A7A78);  // tin
+  const doorMat  = _wm(0x2A1A0A);
+  const winMat   = new THREE.MeshStandardMaterial({ color: 0x1A2838, roughness: 0.3, metalness: 0.1 });
+  const frameMat = _wm(0x4A3A2A);
+
+  // --- Helper: build one western building ---
+  // Front faces +Z. Caller rotates for north/south side.
+  // w=width, d=depth, wH=wall height, fH=false-front height
+  function bldg(w, d, wH, fH, color, signText, opts = {}) {
+    const g = new THREE.Group();
+    const mat = _wm(color);
+    const paintMat = opts.paint ? _wm(opts.paint) : mat;
+
+    // Main walls
+    const walls = new THREE.Mesh(new THREE.BoxGeometry(w, wH, d), mat);
+    walls.position.y = wH / 2;
+    walls.castShadow = true; walls.receiveShadow = true;
+    g.add(walls);
+
+    // False front — thin slab above roofline on front face
+    if (fH > wH) {
+      const ffH = fH - wH;
+      const ff = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, ffH, 0.4), paintMat);
+      ff.position.set(0, wH + ffH / 2, d / 2);
+      ff.castShadow = true;
+      g.add(ff);
+      // Cornice trim at top of false front
+      const trim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.8, 0.35, 0.6), _wm(0x5A4A3A));
+      trim.position.set(0, fH + 0.15, d / 2);
+      g.add(trim);
+    }
+
+    // Roof — flat tin, slight slope (thin box, tilted)
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 0.15, d + 0.8), roofMat);
+    roof.position.set(0, wH + 0.07, -0.4);
+    roof.rotation.x = 0.06; // slight backward slope
+    roof.receiveShadow = true; roof.castShadow = true;
+    g.add(roof);
+
+    // Front door
+    const door = new THREE.Mesh(new THREE.BoxGeometry(2.2, 4.2, 0.15), doorMat);
+    door.position.set(opts.doorX || 0, 2.1, d / 2 + 0.08);
+    g.add(door);
+    // Door frame
+    const dfL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4.4, 0.2), frameMat);
+    dfL.position.set((opts.doorX || 0) - 1.2, 2.2, d / 2 + 0.1);
+    const dfR = dfL.clone(); dfR.position.x = (opts.doorX || 0) + 1.2;
+    const dfT = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.2, 0.2), frameMat);
+    dfT.position.set(opts.doorX || 0, 4.3, d / 2 + 0.1);
+    g.add(dfL, dfR, dfT);
+
+    // Windows — evenly spaced on front face
+    const winCount = opts.wins || Math.max(1, Math.floor(w / 5) - 1);
+    const winSpacing = w / (winCount + 1);
+    for (let i = 1; i <= winCount; i++) {
+      const wx = -w / 2 + winSpacing * i;
+      if (Math.abs(wx - (opts.doorX || 0)) < 2) continue; // skip if overlaps door
+      const win = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.2, 0.12), winMat);
+      win.position.set(wx, wH * 0.6, d / 2 + 0.08);
+      g.add(win);
+      // Window frame
+      const wf = new THREE.Mesh(new THREE.BoxGeometry(1.9, 2.5, 0.08), frameMat);
+      wf.position.set(wx, wH * 0.6, d / 2 + 0.04);
+      g.add(wf);
+      // Shutters
+      if (opts.shutters !== false) {
+        const shMat = _wm(opts.paint || 0x5A4A3A);
+        const shL = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2.4, 0.08), shMat);
+        shL.position.set(wx - 1.25, wH * 0.6, d / 2 + 0.06);
+        const shR = shL.clone(); shR.position.x = wx + 1.25;
+        g.add(shL, shR);
+      }
+    }
+
+    // Second floor windows (for 2-story buildings)
+    if (opts.secondFloor) {
+      const w2Count = Math.max(2, Math.floor(w / 4));
+      const w2Space = w / (w2Count + 1);
+      for (let i = 1; i <= w2Count; i++) {
+        const wx = -w / 2 + w2Space * i;
+        const win = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.8, 0.12), winMat);
+        win.position.set(wx, wH * 0.85, d / 2 + 0.08);
+        g.add(win);
+        const wf = new THREE.Mesh(new THREE.BoxGeometry(1.7, 2.1, 0.08), frameMat);
+        wf.position.set(wx, wH * 0.85, d / 2 + 0.04);
+        g.add(wf);
+      }
+    }
+
+    // Balcony (saloon/hotel)
+    if (opts.balcony) {
+      const balFloor = new THREE.Mesh(new THREE.BoxGeometry(w + 1, 0.2, 2.5), _wm(0x7A6A50));
+      balFloor.position.set(0, wH * 0.55, d / 2 + 1.25);
+      g.add(balFloor);
+      const railMat = _wm(0x6B5B45);
+      const railTop = new THREE.Mesh(new THREE.BoxGeometry(w + 1, 0.12, 0.12), railMat);
+      railTop.position.set(0, wH * 0.55 + 1.1, d / 2 + 2.4);
+      g.add(railTop);
+      // Rail posts
+      for (let rx = -w/2; rx <= w/2; rx += w/4) {
+        const rp = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.1, 0.1), railMat);
+        rp.position.set(rx, wH * 0.55 + 0.55, d / 2 + 2.4);
+        g.add(rp);
+      }
+    }
+
+    // Sign on false front
+    if (signText) {
+      const sBg = opts.paint ? '#' + opts.paint.toString(16).padStart(6,'0') : '#6B5B45';
+      const sTex = _makeSignTex(signText, sBg, '#E8D5B0');
+      const sMat = new THREE.MeshBasicMaterial({ map: sTex, transparent: true });
+      const sW = Math.min(w * 0.85, 8);
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(sW, sW * 0.25), sMat);
+      sign.position.set(0, fH - 1.2, d / 2 + 0.25);
+      g.add(sign);
+    }
+
+    return g;
+  }
+
+  // --- Boardwalks (both sides of street) ---
+  const townLen = 80; // total length of town along X
+  for (const side of [1, -1]) {
+    const zOff = side * (STREET_W / 2 + BOARD_W / 2);
+    // Boardwalk deck
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(townLen, BOARD_H, BOARD_W), boardMat);
+    deck.position.set(0, BOARD_H / 2, zOff);
+    deck.receiveShadow = true; deck.castShadow = true;
+    town.add(deck);
+    // Step up from street
+    const step = new THREE.Mesh(new THREE.BoxGeometry(townLen, BOARD_H / 2, 0.6), boardMat);
+    step.position.set(0, BOARD_H / 4, zOff - side * (BOARD_W / 2 + 0.3));
+    town.add(step);
+    // Porch roof (awning)
+    const awning = new THREE.Mesh(new THREE.BoxGeometry(townLen, 0.12, BOARD_W + 1), _wm(0x7A6A55));
+    awning.position.set(0, PORCH_H, zOff);
+    awning.castShadow = true; awning.receiveShadow = true;
+    town.add(awning);
+    // Support posts
+    for (let px = -townLen/2 + 3; px <= townLen/2 - 3; px += 6) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.25, PORCH_H - BOARD_H, 0.25), postMat);
+      post.position.set(px, BOARD_H + (PORCH_H - BOARD_H) / 2, zOff - side * (BOARD_W / 2 - 0.3));
+      post.castShadow = true;
+      town.add(post);
+    }
+  }
+
+  // --- North side buildings (face south, toward -Z) ---
+  const northDefs = [
+    { w:12, d:16, wH:8, fH:11, c:0xA09070, s:'GENERAL STORE', x:-30, o:{ doorX: 0 }},
+    { w:14, d:18, wH:14,fH:17, c:0x8B6B4A, s:'SALOON',        x:-15, o:{ paint:0x8B4040, balcony:true, secondFloor:true }},
+    { w: 8, d:14, wH:7, fH:10, c:0x7A6A50, s:'SHERIFF',       x: -4, o:{ wins:1 }},
+    { w:14, d:16, wH:14,fH:17, c:0xC8B888, s:'HOTEL',         x: 9,  o:{ paint:0x6A5A48, secondFloor:true, balcony:true }},
+    { w: 8, d:12, wH:7, fH:10, c:0x6B5B45, s:'BARBER',        x: 20, o:{ wins:1 }},
+    { w:14, d:20, wH:6, fH: 8, c:0x8B7355, s:'LIVERY STABLE', x: 32, o:{ shutters:false, doorX:0 }},
+  ];
+  for (const b of northDefs) {
+    const m = bldg(b.w, b.d, b.wH, b.fH, b.c, b.s, b.o || {});
+    m.position.set(b.x, 0, STREET_W/2 + BOARD_W + b.d/2);
+    m.rotation.y = Math.PI; // face south
+    town.add(m);
+  }
+
+  // --- South side buildings (face north, toward +Z) ---
+  const southDefs = [
+    { w:10, d:14, wH:8, fH:11, c:0x7A6A50, s:'BANK',         x:-27, o:{ paint:0x5A5A58, wins:1 }},
+    { w:12, d:16, wH:8, fH:12, c:0x8B7355, s:'DRY GOODS',    x:-14, o:{ paint:0x5A6B50 }},
+    { w: 8, d:12, wH:7, fH:10, c:0xA09070, s:'ASSAY OFFICE', x: -4, o:{ wins:1 }},
+    { w:10, d:14, wH:8, fH:11, c:0x6B5B45, s:'BLACKSMITH',   x:  7, o:{ shutters:false }},
+    { w:10, d:16, wH:8, fH:12, c:0x8B6B4A, s:'FEED & SEED',  x: 18, o:{}},
+    { w:10, d:16, wH:7, fH: 9, c:0x8B7355, s:'UNDERTAKER',   x: 29, o:{ paint:0x3A3A38 }},
+  ];
+  for (const b of southDefs) {
+    const m = bldg(b.w, b.d, b.wH, b.fH, b.c, b.s, b.o || {});
+    m.position.set(b.x, 0, -(STREET_W/2 + BOARD_W + b.d/2));
+    // no rotation — front already faces +Z (toward street)
+    town.add(m);
+  }
+
+  // --- Street props ---
+  // Hitching posts in front of saloon
+  for (const hx of [-18, -12]) {
+    const hp = new THREE.Mesh(new THREE.BoxGeometry(0.15, 3, 0.15), postMat);
+    hp.position.set(hx, 1.5, STREET_W/2 - 1);
+    hp.castShadow = true;
+    town.add(hp);
+  }
+  // Hitching rail
+  const hRail = new THREE.Mesh(new THREE.BoxGeometry(7, 0.1, 0.1), postMat);
+  hRail.position.set(-15, 2.8, STREET_W/2 - 1);
+  town.add(hRail);
+
+  // Water trough
+  const troughMat = _wm(0x5A4A3A);
+  const trough = new THREE.Mesh(new THREE.BoxGeometry(4, 1.2, 1.5), troughMat);
+  trough.position.set(-10, 0.6, STREET_W/2 - 2);
+  trough.castShadow = true;
+  town.add(trough);
+
+  // Barrels outside general store
+  const barrelMat = _wm(0x6A5040);
+  for (const [bx, bz] of [[-33, STREET_W/2 + 1], [-32, STREET_W/2 + 1.8]]) {
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 1.8, 8), barrelMat);
+    barrel.position.set(bx, 0.9, bz);
+    barrel.castShadow = true;
+    town.add(barrel);
+  }
+
+  // Crates outside dry goods
+  const crateMat = _wm(0x8B7355);
+  for (const [cx, cz, cs] of [[-16, -(STREET_W/2+1), 1.2], [-15, -(STREET_W/2+1.5), 0.8]]) {
+    const crate = new THREE.Mesh(new THREE.BoxGeometry(cs, cs, cs), crateMat);
+    crate.position.set(cx, cs/2, cz);
+    crate.rotation.y = Math.random() * 0.3;
+    crate.castShadow = true;
+    town.add(crate);
+  }
+
+  return town;
+}
+
 const buildingDots = [];
 for (const b of buildingPositions) {
   const x = b.nx * WORLD_SIZE - HALF;
   const z = b.nz * WORLD_SIZE - HALF;
-  const mesh = makeBuilding(b.color);
-  addWrapObject(x, z, mesh, 3000);
+  if (b.id === 1) {
+    // Replace building 1 with the western town
+    const townMesh = makeWesternTown();
+    addWrapObject(x, z, townMesh, 3000);
+  } else {
+    const mesh = makeBuilding(b.color);
+    addWrapObject(x, z, mesh, 3000);
+  }
   buildingDots.push({ x, z, id: b.id, color: b.color });
 }
 
