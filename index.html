@@ -607,29 +607,20 @@ scene.add(starGroup);
 // ============================================================
 scene.add(camera); // still needed for any future camera children
 
-// Build moon texture — full-canvas disc for sky shader UV mapping.
-// The shader projects view direction onto the moon's tangent plane and samples this texture.
+// Build moon fallback texture — clean white disc, no fake craters.
+// Real moon photo swaps in when loaded; this is just the fallback.
 (function buildMoonShaderTex() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const ctx = c.getContext('2d');
-  const R = 124; // disc fills nearly the whole canvas
+  const R = 124;
   ctx.save();
   ctx.beginPath(); ctx.arc(128,128,R,0,Math.PI*2); ctx.clip();
+  // Simple clean white disc with subtle limb darkening
   const base = ctx.createRadialGradient(128,128,0, 128,128,R);
-  base.addColorStop(0,    'rgba(255,253,238,1)');
-  base.addColorStop(0.60, 'rgba(245,242,220,1)');
-  base.addColorStop(0.85, 'rgba(215,210,185,1)');
-  base.addColorStop(1.0,  'rgba(190,185,160,1)');
+  base.addColorStop(0,    'rgba(255,253,245,1)');
+  base.addColorStop(0.75, 'rgba(250,248,238,1)');
+  base.addColorStop(1.0,  'rgba(230,225,215,1)');
   ctx.fillStyle = base; ctx.fillRect(0,0,256,256);
-  // Maria (dark patches)
-  ctx.globalAlpha = 0.28; ctx.fillStyle = '#6A6858';
-  for (const [x,y,r] of [[110,90,38],[150,130,28],[90,145,22],[155,80,18]]) {
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-  }
-  ctx.globalAlpha = 0.18; ctx.fillStyle = '#F0EDD0';
-  for (const [x,y,r] of [[85,80,12],[155,108,15],[95,145,9],[140,158,7],[115,115,18]]) {
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-  }
   ctx.restore();
   const tex = new THREE.CanvasTexture(c);
   skyMat.uniforms.moonTex.value = tex;
