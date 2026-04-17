@@ -67,12 +67,21 @@ canvas { display: block; }
 <div id="minimap"><canvas id="minimap-canvas" width="320" height="320"></canvas></div>
 <div id="tweaks" style="position:fixed;top:10px;left:10px;background:rgba(0,0,0,0.55);color:#eee;font:12px monospace;padding:10px 12px;border-radius:6px;z-index:10;line-height:1.6;pointer-events:auto;min-width:180px">
   <div style="font-weight:bold;margin-bottom:4px">Tweaks</div>
+  <div style="opacity:0.6;font-size:10px;margin-bottom:2px">— Movement —</div>
   <div>Turn speed: <span id="tv-turn">1.80</span> <button data-tw="turn" data-d="-1">−</button><button data-tw="turn" data-d="1">+</button></div>
   <div>Mouse sens: <span id="tv-mouse">0.0020</span> <button data-tw="mouse" data-d="-1">−</button><button data-tw="mouse" data-d="1">+</button></div>
   <div>Walk: <span id="tv-walk">30</span> <button data-tw="walk" data-d="-1">−</button><button data-tw="walk" data-d="1">+</button></div>
   <div>Run: <span id="tv-run">65</span> <button data-tw="run" data-d="-1">−</button><button data-tw="run" data-d="1">+</button></div>
-  <div>Night bright: <span id="tv-night">3.0</span> <button data-tw="night" data-d="-1">−</button><button data-tw="night" data-d="1">+</button></div>
-  <div>Moon bright: <span id="tv-moon">1.00</span> <button data-tw="moon" data-d="-1">−</button><button data-tw="moon" data-d="1">+</button></div>
+  <div style="opacity:0.6;font-size:10px;margin:4px 0 2px">— Sky —</div>
+  <div>Night bright: <span id="tv-night">0.50</span> <button data-tw="night" data-d="-1">−</button><button data-tw="night" data-d="1">+</button></div>
+  <div style="opacity:0.6;font-size:10px;margin:4px 0 2px">— Moon —</div>
+  <div>Brightness: <span id="tv-moon">1.00</span> <button data-tw="moon" data-d="-1">−</button><button data-tw="moon" data-d="1">+</button></div>
+  <div>Size: <span id="tv-msize">700</span> <button data-tw="msize" data-d="-1">−</button><button data-tw="msize" data-d="1">+</button></div>
+  <div>Glow size: <span id="tv-mgsize">1.20</span> <button data-tw="mgsize" data-d="-1">−</button><button data-tw="mgsize" data-d="1">+</button></div>
+  <div>Glow amt: <span id="tv-mgop">0.45</span> <button data-tw="mgop" data-d="-1">−</button><button data-tw="mgop" data-d="1">+</button></div>
+  <div>Rise hr: <span id="tv-mrise">19.0</span> <button data-tw="mrise" data-d="-1">−</button><button data-tw="mrise" data-d="1">+</button></div>
+  <div>Set hr: <span id="tv-mset">6.0</span> <button data-tw="mset" data-d="-1">−</button><button data-tw="mset" data-d="1">+</button></div>
+  <div>Horiz fade: <span id="tv-mfade">4</span> <button data-tw="mfade" data-d="-1">−</button><button data-tw="mfade" data-d="1">+</button></div>
   <div style="margin-top:4px;opacity:0.7;font-size:11px">
     [ ] turn &nbsp; ; ' mouse<br>
     , . walk &nbsp; K L run &nbsp; N M night &nbsp; O P moon
@@ -95,8 +104,14 @@ let WALK_SPEED = 30;
 let RUN_SPEED = 65;
 let TURN_SPEED = 1.8;
 let MOUSE_SENS = 0.002;
-let NIGHT_BRIGHT = 0.50; // ADDITIVE ambient added at night on top of keyframe value (0=dark, no upper limit)
-let MOON_BRIGHT  = 1.00; // Moon disc brightness multiplier (0=off, 1=natural, 2=blinding white)
+let NIGHT_BRIGHT   = 0.50; // ADDITIVE ambient added at night on top of keyframe value
+let MOON_BRIGHT    = 1.00; // disc color multiplier: 0=off  1=natural  2=blinding white
+let MOON_SIZE      = 700;  // disc sprite scale (world units)
+let MOON_GLOW_MULT = 1.20; // glow sprite size as multiple of MOON_SIZE
+let MOON_GLOW_OP   = 0.45; // glow opacity at full visibility
+let MOON_RISE      = 19.0; // hour moon fades IN  (default ~7 pm)
+let MOON_SET       = 6.0;  // hour moon fades OUT (default ~6 am)
+let MOON_FADE_ALT  = 4;    // moon altitude (y world-units) where horizon fade completes
 
 // Returns the shortest signed delta from a to b on a wrap of size W.
 // Result is in [-W/2, W/2].
@@ -533,16 +548,28 @@ function refreshTweaks() {
   document.getElementById('tv-mouse').textContent = MOUSE_SENS.toFixed(4);
   document.getElementById('tv-walk').textContent = WALK_SPEED.toFixed(0);
   document.getElementById('tv-run').textContent = RUN_SPEED.toFixed(0);
-  document.getElementById('tv-night').textContent = NIGHT_BRIGHT.toFixed(2);
-  document.getElementById('tv-moon').textContent  = MOON_BRIGHT.toFixed(2);
+  document.getElementById('tv-night').textContent  = NIGHT_BRIGHT.toFixed(2);
+  document.getElementById('tv-moon').textContent   = MOON_BRIGHT.toFixed(2);
+  document.getElementById('tv-msize').textContent  = MOON_SIZE.toFixed(0);
+  document.getElementById('tv-mgsize').textContent = MOON_GLOW_MULT.toFixed(2);
+  document.getElementById('tv-mgop').textContent   = MOON_GLOW_OP.toFixed(2);
+  document.getElementById('tv-mrise').textContent  = MOON_RISE.toFixed(1);
+  document.getElementById('tv-mset').textContent   = MOON_SET.toFixed(1);
+  document.getElementById('tv-mfade').textContent  = MOON_FADE_ALT.toFixed(0);
 }
 function adjustTweak(kind, dir) {
   if (kind === 'turn')  TURN_SPEED  = Math.max(0.1, TURN_SPEED  + dir * 0.1);
   if (kind === 'mouse') MOUSE_SENS  = Math.max(0.0002, MOUSE_SENS + dir * 0.0002);
   if (kind === 'walk')  WALK_SPEED  = Math.max(1, WALK_SPEED + dir * 5);
   if (kind === 'run')   RUN_SPEED   = Math.max(1, RUN_SPEED  + dir * 5);
-  if (kind === 'night') NIGHT_BRIGHT = Math.max(0, NIGHT_BRIGHT + dir * 0.1);
-  if (kind === 'moon')  MOON_BRIGHT  = Math.max(0, MOON_BRIGHT  + dir * 0.1);
+  if (kind === 'night')  NIGHT_BRIGHT   = Math.max(0,   NIGHT_BRIGHT   + dir * 0.10);
+  if (kind === 'moon')   MOON_BRIGHT    = Math.max(0,   MOON_BRIGHT    + dir * 0.10);
+  if (kind === 'msize')  MOON_SIZE      = Math.max(50,  MOON_SIZE      + dir * 50);
+  if (kind === 'mgsize') MOON_GLOW_MULT = Math.max(1.0, MOON_GLOW_MULT + dir * 0.10);
+  if (kind === 'mgop')   MOON_GLOW_OP   = Math.max(0,   MOON_GLOW_OP   + dir * 0.05);
+  if (kind === 'mrise')  MOON_RISE      = ((MOON_RISE  + dir * 0.5 + 24) % 24);
+  if (kind === 'mset')   MOON_SET       = ((MOON_SET   + dir * 0.5 + 24) % 24);
+  if (kind === 'mfade')  MOON_FADE_ALT  = Math.max(1,   MOON_FADE_ALT  + dir * 1);
   refreshTweaks();
 }
 document.querySelectorAll('#tweaks button').forEach(b => {
@@ -579,8 +606,26 @@ function applyContinuousTime(dt) {
 
   // Sun: fade near horizon
   const sunFade = THREE.MathUtils.clamp(sunPos.y / 15, 0, 1);
-  // Moon: stay full until very close to horizon, then fade quickly
-  const moonFade = THREE.MathUtils.clamp(moonPos.y / 4, 0, 1);
+
+  // Moon visibility — two-part:
+  // 1) Time-of-day window: fades in over 1 h after MOON_RISE, out 1 h before MOON_SET.
+  //    MOON_RISE > MOON_SET means it spans midnight (normal night-time case).
+  const FADE_H = 1.0;
+  const h24 = ((timeOfDay % 24) + 24) % 24;
+  let moonTimeVis;
+  if (MOON_RISE > MOON_SET) {
+    if      (h24 >= MOON_RISE) moonTimeVis = THREE.MathUtils.clamp((h24 - MOON_RISE) / FADE_H, 0, 1);
+    else if (h24 <  MOON_SET)  moonTimeVis = THREE.MathUtils.clamp((MOON_SET - h24)  / FADE_H, 0, 1);
+    else                        moonTimeVis = 0;
+  } else {
+    if (h24 < MOON_RISE || h24 >= MOON_SET) moonTimeVis = 0;
+    else moonTimeVis = Math.min(
+      THREE.MathUtils.clamp((h24 - MOON_RISE) / FADE_H, 0, 1),
+      THREE.MathUtils.clamp((MOON_SET - h24)  / FADE_H, 0, 1)
+    );
+  }
+  // 2) Horizon fade: 0 at horizon → 1 once moon is MOON_FADE_ALT units above it
+  const moonFade = THREE.MathUtils.clamp(moonPos.y / MOON_FADE_ALT, 0, 1);
 
   const { lf, lc, lo, hi } = lerpSkyState(timeOfDay);
 
@@ -653,17 +698,19 @@ function applyContinuousTime(dt) {
   );
   moonGlowSprite.position.copy(moonSprite.position);
 
-  const moonVis = lf(lo[KMOON], hi[KMOON]) * moonFade;
-  // Elevation 0=horizon, 1=zenith — drives white-ball vs texture balance
-  const moonElev = THREE.MathUtils.clamp(moonPos.y / 400, 0, 1);
-  // Texture sprite: always present but washed out when high (white ball).
-  // Near horizon the glow backs off and craters become visible.
+  // moonVis = time-of-day window × horizon fade (fully slider-driven, replaces KMOON keyframe)
+  const moonVis = moonTimeVis * moonFade;
+
+  // Size — driven by MOON_SIZE slider
+  moonSprite.scale.set(MOON_SIZE, MOON_SIZE, 1);
+  moonGlowSprite.scale.set(MOON_SIZE * MOON_GLOW_MULT, MOON_SIZE * MOON_GLOW_MULT, 1);
+
   moonSpriteMat.opacity = moonVis;
-  // MOON_BRIGHT multiplies the disc color: 1.0 = natural cream-white, >1 = blown-out white
+  // MOON_BRIGHT: 0–1 dims the cream color, above 1 pushes toward pure white
   const mb = Math.min(MOON_BRIGHT, 1.0);
-  const mbOver = Math.max(0, MOON_BRIGHT - 1.0);  // above 1 shifts toward pure white
+  const mbOver = Math.max(0, MOON_BRIGHT - 1.0);
   moonSpriteMat.color.setRGB(mb + mbOver, mb + mbOver * 0.97, mb + mbOver * 0.92);
-  moonGlowMat.opacity = moonVis * 0.45 * MOON_BRIGHT;  // glow scales with brightness
+  moonGlowMat.opacity = moonVis * MOON_GLOW_OP * MOON_BRIGHT;
 
   // Moon directional light: cool blue, casts shadows at night
   moonDirLight.position.set(
