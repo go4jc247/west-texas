@@ -138,7 +138,8 @@ let timeOfDay = 10.0; // start mid-morning
 const TIME_SPEED = 1 / 60; // 1 game-hour per real minute → full day in 24 min
 let SYNC_CLOCK = false;    // when true, timeOfDay tracks the real wall clock
 const SKY_DIST = 5400;     // distance of sun/moon billboards from camera
-// Sun/moon directions are now passed directly to sky shader uniforms in applyContinuousTime.
+let _lastSunDir  = new THREE.Vector3(0, 1, 0);
+let _lastMoonDir = new THREE.Vector3(0, -1, 0);
 
 // Sky keyframes — each row is one moment in the day.
 // Colors stored as hex ints; floats are scalars.
@@ -148,8 +149,8 @@ const SKY_DIST = 5400;     // distance of sun/moon billboards from camera
 //         expo(sure), stars, moon, discC(olor), discS(ize), discI(ntensity)
 const SKY_KEYS = [
 // h     skyT      skyM      skyB      hN        hF        fog       fogD    sunC      sunI  ambC      ambI  hkC       hgC       hkI   expo  stars moon  discC     discS  discI
- [0,   0x020408, 0x030610, 0x040815, 0x081018, 0x020406, 0x030810, 0.00010, 0xBBCCEE, 0.00, 0x1E304E, 0.22, 0x0F1C35, 0x0A1220, 0.28, 0.78, 1.0, 1.0, 0x000000, 0.00, 0.0],
- [4.5, 0x030610, 0x040812, 0x060C1A, 0x0A1420, 0x030608, 0x050A14, 0.00010, 0xBBCCEE, 0.00, 0x20304E, 0.24, 0x12203C, 0x0C1424, 0.30, 0.78, 0.9, 0.8, 0x000000, 0.00, 0.0],
+ [0,   0x0A1428, 0x0F1C35, 0x162240, 0x1C2C4A, 0x08101E, 0x0D1A30, 0.00010, 0xBBCCEE, 0.00, 0x1E304E, 0.22, 0x0F1C35, 0x0A1220, 0.28, 0.78, 1.0, 1.0, 0x000000, 0.00, 0.0],
+ [4.5, 0x0C1A30, 0x122238, 0x182C46, 0x1E3050, 0x0A1424, 0x101E38, 0.00010, 0xBBCCEE, 0.00, 0x20304E, 0.24, 0x12203C, 0x0C1424, 0.30, 0.78, 0.9, 0.8, 0x000000, 0.00, 0.0],
  // SUNRISE — blue hour: cool blue-violet, no warm tones, clean crisp air
  [5.5, 0x060A20, 0x181030, 0x301848, 0xAA88CC, 0x101040, 0x3A3060, 0.00018, 0xBBCCEE, 0.00, 0x8899BB, 0.22, 0x302870, 0x181828, 0.16, 0.66, 0.5, 0.4, 0xAABBFF, 0.05, 0.0],
  [6.0, 0x1C1460, 0x8A3060, 0xFF8888, 0xFFCCBB, 0x3A2888, 0xAA7878, 0.00026, 0xFFF0EE, 0.40, 0xFFCCDD, 0.36, 0x7060AA, 0x3A2828, 0.24, 0.78, 0.1, 0.05,0xFFDDEE, 0.08, 1.8],
@@ -164,9 +165,9 @@ const SKY_KEYS = [
  [18.0,0x120420, 0x501400, 0xCC3800, 0xAA5820, 0x3C0830, 0x6A2810, 0.00032, 0xFFAA88, 0.15, 0xCC9877, 0.22, 0x380C58, 0x281808, 0.20, 0.74, 0.45,0.35,0xFF4400, 0.04, 0.5],
  // Post-sunset twilight: warm amber fades into purple-magenta — clearly different from pre-dawn blue
  [18.6,0x0E0618, 0x3A0C30, 0x6A1850, 0x883060, 0x1A0830, 0x3A1838, 0.00020, 0xBBCCEE, 0.00, 0x6A2848, 0.18, 0x200C38, 0x180810, 0.18, 0.72, 0.70,0.60,0x000000, 0.00, 0.0],
- [19,  0x040810, 0x060C18, 0x080E20, 0x0C1828, 0x030610, 0x050A18, 0.00012, 0xBBCCEE, 0.00, 0x182840, 0.18, 0x0D1828, 0x08101C, 0.24, 0.72, 0.85,0.85,0x000000, 0.00, 0.0],
- [21,  0x020408, 0x030610, 0x040815, 0x081018, 0x020406, 0x030810, 0.00010, 0xBBCCEE, 0.00, 0x1E304E, 0.22, 0x0F1C35, 0x0A1220, 0.28, 0.78, 1.0, 1.0, 0x000000, 0.00, 0.0],
- [24,  0x020408, 0x030610, 0x040815, 0x081018, 0x020406, 0x030810, 0.00010, 0xBBCCEE, 0.00, 0x1E304E, 0.22, 0x0F1C35, 0x0A1220, 0.28, 0.78, 1.0, 1.0, 0x000000, 0.00, 0.0],
+ [19,  0x08101E, 0x0D1830, 0x121E38, 0x182840, 0x060E1C, 0x0A1428, 0.00012, 0xBBCCEE, 0.00, 0x182840, 0.18, 0x0D1828, 0x08101C, 0.24, 0.72, 0.85,0.85,0x000000, 0.00, 0.0],
+ [21,  0x0A1428, 0x0F1C35, 0x162240, 0x1C2C4A, 0x08101E, 0x0D1A30, 0.00010, 0xBBCCEE, 0.00, 0x1E304E, 0.22, 0x0F1C35, 0x0A1220, 0.28, 0.78, 1.0, 1.0, 0x000000, 0.00, 0.0],
+ [24,  0x0A1428, 0x0F1C35, 0x162240, 0x1C2C4A, 0x08101E, 0x0D1A30, 0.00010, 0xBBCCEE, 0.00, 0x1E304E, 0.22, 0x0F1C35, 0x0A1220, 0.28, 0.78, 1.0, 1.0, 0x000000, 0.00, 0.0],
 ];
 
 // Column indices for readability
@@ -268,8 +269,6 @@ scene.add(hemi);
 const skyGeo = new THREE.SphereGeometry(5500, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide,
-  transparent: true,    // alpha-blend over stars behind the dome
-  depthWrite: false,    // sky dome never occludes anything
   uniforms: {
     topColor: { value: new THREE.Color(0x2255AA) },
     midColor: { value: new THREE.Color(0x66BBEE) },
@@ -280,104 +279,31 @@ const skyMat = new THREE.ShaderMaterial({
     sunDiscColor: { value: new THREE.Color(0xFFFFF8) },
     sunDiscSize: { value: 0.03 },
     sunDiscIntensity: { value: 1.2 },
-    sunGlowColor: { value: new THREE.Color(1, 0.85, 0.5) },
-    sunGlowIntensity: { value: 0.0 },
-    moonDirection: { value: new THREE.Vector3(0, -1, 0) },
-    moonDiscSize: { value: 0.065 },
-    moonDiscColor: { value: new THREE.Color(1, 1, 1) },
-    moonDiscIntensity: { value: 0.0 },
-    moonGlowColor: { value: new THREE.Color(0.78, 0.86, 1.0) },
-    moonGlowIntensity: { value: 0.45 },
-    moonGlowMult: { value: 1.2 },
-    moonTex: { value: null },
-    resolution: { value: new THREE.Vector2(innerWidth, innerHeight) },
   },
   vertexShader: `
-    uniform vec3 sunDirection, moonDirection;
-    uniform float sunDiscSize, moonDiscSize;
-    uniform vec2 resolution;
     varying vec3 vWorldDir;
-    // Pass screen-space sun/moon pixel positions + disc pixel radius to frag shader
-    varying vec2 vSunPx;
-    varying vec2 vMoonPx;
-    varying float vSunDiscPx;
-    varying float vMoonDiscPx;
-    varying float vSunVis;
-    varying float vMoonVis;
     void main() {
       vWorldDir = normalize((modelMatrix * vec4(position, 1.0)).xyz - cameraPosition);
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      // Project sun/moon world positions to screen pixels
-      float focalY = projectionMatrix[1][1]; // = 1/tan(fov/2)
-      vec4 sc = projectionMatrix * viewMatrix * vec4(cameraPosition + sunDirection * 5000.0, 1.0);
-      vSunVis = step(0.001, sc.w);
-      vSunPx = (sc.xy / sc.w * 0.5 + 0.5) * resolution;
-      vSunDiscPx = sunDiscSize * focalY * resolution.y * 0.5;
-      vec4 mc = projectionMatrix * viewMatrix * vec4(cameraPosition + moonDirection * 5000.0, 1.0);
-      vMoonVis = step(0.001, mc.w);
-      vMoonPx = (mc.xy / mc.w * 0.5 + 0.5) * resolution;
-      vMoonDiscPx = moonDiscSize * focalY * resolution.y * 0.5;
     }`,
   fragmentShader: `
     uniform vec3 topColor, midColor, bottomColor, sunDirection, horizonNear, horizonFar, sunDiscColor;
-    uniform float sunDiscIntensity;
-    uniform vec3 sunGlowColor;
-    uniform float sunGlowIntensity;
-    uniform vec3 moonDiscColor, moonGlowColor;
-    uniform float moonDiscIntensity, moonGlowIntensity, moonGlowMult;
-    uniform sampler2D moonTex;
+    uniform float sunDiscSize, sunDiscIntensity;
     varying vec3 vWorldDir;
-    varying vec2 vSunPx, vMoonPx;
-    varying float vSunDiscPx, vMoonDiscPx, vSunVis, vMoonVis;
     void main() {
       vec3 dir = normalize(vWorldDir);
       float h = dir.y;
-      // Base sky gradient from height
-      vec3 baseCol = mix(bottomColor, midColor, smoothstep(0.0, 0.15, h));
-      baseCol = mix(baseCol, topColor, smoothstep(0.15, 0.7, h));
-      // Horizon tint
+      vec3 col = mix(bottomColor, midColor, smoothstep(0.0, 0.15, h));
+      col = mix(col, topColor, smoothstep(0.15, 0.7, h));
       float sunDot = dot(normalize(vec3(dir.x, 0.0, dir.z)), normalize(vec3(sunDirection.x, 0.0, sunDirection.z)));
       vec3 hCol = mix(horizonFar, horizonNear, smoothstep(-0.3, 1.0, sunDot));
-      baseCol = mix(baseCol, hCol, smoothstep(0.15, 0.0, h) * smoothstep(-0.05, 0.02, h) * 0.8);
-
-      // Atmospheric scattering: sky brightness radiates FROM the sun.
-      // Near the sun the sky washes toward bright white; far away it's normal blue.
-      float sAngW = acos(clamp(dot(dir, sunDirection), -1.0, 1.0));
-      float scatter = 1.0 / (1.0 + sAngW * sAngW * 0.8);
-      // Blend toward white near sun + brighten
-      vec3 col = mix(baseCol, vec3(1.0, 0.98, 0.92), scatter * sunGlowIntensity * 0.55);
-      col *= 1.0 + scatter * sunGlowIntensity * 1.2;
-
-      // Alpha from base sky luminance (before sun disc, so no rings)
-      float baseLum = dot(col, vec3(0.299, 0.587, 0.114));
-
-      // === SUN DISC — screen-space, blazingly bright ===
-      float _sDist = length(gl_FragCoord.xy - vSunPx);
-      float sn = _sDist / max(vSunDiscPx, 1.0);
-      // Bright disc core
-      float discMask = smoothstep(1.2, 0.3, sn);
-      col += sunDiscColor * discMask * sunDiscIntensity * 4.0 * vSunVis;
-
-      // === MOON — screen-space ===
-      float _mDist = length(gl_FragCoord.xy - vMoonPx);
-      float mn = _mDist / max(vMoonDiscPx, 1.0);
-      float _mgPx = vMoonDiscPx * moonGlowMult;
-      float mgn = _mDist / max(_mgPx, 1.0);
-      col += moonGlowColor * exp(-mgn*mgn*0.5) * moonDiscIntensity * moonGlowIntensity * 0.25 * vMoonVis;
-      float moonSolid = 0.0; // tracks moon disc coverage for solid alpha
-      float moonEdge = smoothstep(1.05, 0.94, mn);
-      if (moonEdge > 0.0 && moonDiscIntensity > 0.001 && vMoonVis > 0.0) {
-        vec2 moonOff = (gl_FragCoord.xy - vMoonPx) / vMoonDiscPx;
-        vec2 moonUV = clamp(vec2(moonOff.x, -moonOff.y) * 0.5 + 0.5, 0.0, 1.0);
-        vec4 mt = texture2D(moonTex, moonUV);
-        float mBlend = moonEdge * moonDiscIntensity * mt.a;
-        col = mix(col, mt.rgb * moonDiscColor, mBlend);
-        moonSolid = mBlend; // moon disc is solid — blocks stars
-      }
-      // Alpha from BASE sky (before sun/moon glow) — smooth gradient,
-      // no rings from glow falloff. Day sky = opaque, night = transparent.
-      float skyAlpha = clamp(baseLum * 5.0, 0.0, 1.0);
-      gl_FragColor = vec4(col, max(skyAlpha, moonSolid));
+      col = mix(col, hCol, smoothstep(0.15, 0.0, h) * smoothstep(-0.05, 0.02, h) * 0.8);
+      float sAng = acos(clamp(dot(dir, sunDirection), -1.0, 1.0));
+      col += sunDiscColor * exp(-sAng*sAng*8.0) * 0.4 * sunDiscIntensity;
+      // Guard: when intensity=0 the disc color is black; without this guard it paints a black circle.
+      float discBlend = smoothstep(sunDiscSize, sunDiscSize*0.5, sAng) * clamp(sunDiscIntensity, 0.0, 1.0);
+      col = mix(col, sunDiscColor * sunDiscIntensity, discBlend);
+      gl_FragColor = vec4(col, 1.0);
     }`
 });
 const skyDome = new THREE.Mesh(skyGeo, skyMat);
@@ -386,7 +312,7 @@ scene.add(skyDome);
 // ============================================================
 // STARS — real constellations + Milky Way band, sidereal rotation
 // ============================================================
-const STAR_R = 5600; // behind sky dome (5500) — stars are the farthest layer
+const STAR_R = 5490;
 // Latitude tilt: Rx(-60°) puts celestial north pole 30° above north horizon (30°N lat)
 // cos(-60°)=0.5, sin(-60°)=-0.866
 const _sct = 0.5, _sst = -0.866;
@@ -420,7 +346,7 @@ const NAMED_STARS = [
   [13.40,54.93, 3.5, 1.0, 0.95, 0.8],  // Mizar (A, double star)
   [13.79,49.31, 3.5, 0.7, 0.8,  1.0],  // Alkaid (B, handle end)
   // === LITTLE DIPPER / Ursa Minor ===
-  [2.53, 89.26, 4.5, 1.0, 1.0,  0.9],  // Polaris (α, north star — slightly larger)
+  [2.53, 89.26, 4.5, 1.0, 1.0,  0.9],  // Polaris (α, north star)
   [14.85,74.16, 3.0, 1.0, 0.8,  0.5],  // Kochab (β, outer bowl)
   [15.35,71.83, 2.5, 1.0, 0.9,  0.7],  // Pherkad (γ)
   [17.53,86.58, 2.0, 1.0, 0.95, 0.85], // Yildun (δ, mid-handle)
@@ -642,115 +568,49 @@ scene.add(starGroup);
 
 // ============================================================
 // CONSTELLATION LINES + LABELS — toggled with 'L' key
-// Lines connect stars within each constellation; labels float near center.
 // ============================================================
 let constellationsVisible = false;
-
-// Each constellation: { name, lines: [[ra1,dec1, ra2,dec2], ...], label: [ra,dec] }
 const CONSTELLATIONS = [
-  { name: 'Orion', label: [5.55, -1],
-    lines: [
-      [5.92,7.41, 5.42,6.35],   // Betelgeuse-Bellatrix
-      [5.24,-8.20, 5.79,-9.67], // Rigel-Saiph
-      [5.92,7.41, 5.53,-0.30],  // Betelgeuse-Mintaka
-      [5.42,6.35, 5.53,-0.30],  // Bellatrix-Mintaka
-      [5.53,-0.30, 5.60,-1.20], // Mintaka-Alnilam
-      [5.60,-1.20, 5.68,-1.94], // Alnilam-Alnitak
-      [5.68,-1.94, 5.79,-9.67], // Alnitak-Saiph
-      [5.24,-8.20, 5.68,-1.94], // Rigel-Alnitak
-    ]},
-  { name: 'Big Dipper', label: [12.0, 57],
-    lines: [
-      [11.06,61.75, 11.03,56.38], // Dubhe-Merak
-      [11.03,56.38, 11.90,53.69], // Merak-Phecda
-      [11.90,53.69, 12.26,57.03], // Phecda-Megrez
-      [12.26,57.03, 11.06,61.75], // Megrez-Dubhe (close bowl)
-      [12.26,57.03, 12.90,55.96], // Megrez-Alioth
-      [12.90,55.96, 13.40,54.93], // Alioth-Mizar
-      [13.40,54.93, 13.79,49.31], // Mizar-Alkaid
-    ]},
-  { name: 'Little Dipper', label: [15.5, 80],
-    lines: [
-      [2.53,89.26, 17.53,86.58],  // Polaris-Yildun (handle)
-      [17.53,86.58, 16.77,82.04], // Yildun-Epsilon (handle)
-      [16.77,82.04, 15.73,77.79], // Epsilon-Zeta (handle to bowl)
-      [15.73,77.79, 14.85,74.16], // Zeta-Kochab (bowl top)
-      [14.85,74.16, 15.35,71.83], // Kochab-Pherkad (bowl left)
-      [15.35,71.83, 16.29,75.75], // Pherkad-Eta (bowl bottom)
-      [16.29,75.75, 15.73,77.79], // Eta-Zeta (close bowl)
-    ]},
-  { name: 'Cassiopeia', label: [1.0, 62],
-    lines: [
-      [0.15,59.15, 0.67,56.54],  // Caph-Schedar
-      [0.67,56.54, 0.95,60.72],  // Schedar-Gamma
-      [0.95,60.72, 1.43,60.24],  // Gamma-Ruchbah
-      [1.43,60.24, 1.91,63.67],  // Ruchbah-Segin
-    ]},
-  { name: 'Cygnus', label: [20.3, 38],
-    lines: [
-      [20.69,45.28, 20.37,40.26], // Deneb-Sadr
-      [20.37,40.26, 19.51,27.96], // Sadr-Albireo
-      [20.37,40.26, 20.77,33.97], // Sadr-Gienah
-      [20.37,40.26, 21.22,30.23], // Sadr-Zeta Cyg
-    ]},
-  { name: 'Scorpius', label: [16.8, -32],
-    lines: [
-      [16.49,-26.43, 16.09,-19.81], // Antares-Graffias
-      [16.09,-19.81, 16.00,-22.62], // Graffias-Dschubba
-      [16.00,-22.62, 16.36,-25.59], // Dschubba-Alniyat
-      [16.36,-25.59, 16.49,-26.43], // Alniyat-Antares
-      [16.49,-26.43, 16.86,-38.05], // Antares-Mu Sco
-      [16.86,-38.05, 17.62,-42.99], // Mu-Sargas
-      [17.62,-42.99, 17.56,-37.10], // Sargas-Shaula
-    ]},
-  { name: 'Leo', label: [10.5, 18],
-    lines: [
-      [10.14,11.97, 11.82,14.57], // Regulus-Denebola
-      [10.14,11.97, 10.33,19.84], // Regulus-Algieba
-      [10.33,19.84, 11.24,20.52], // Algieba-Zosma
-      [11.24,20.52, 11.82,14.57], // Zosma-Denebola
-    ]},
-  { name: 'Sagittarius', label: [18.6, -28],
-    lines: [
-      [18.40,-34.38, 18.35,-29.83], // Kaus Australis-Kaus Media
-      [18.35,-29.83, 18.48,-25.42], // Kaus Media-Kaus Borealis
-      [18.35,-29.83, 18.92,-26.30], // Kaus Media-Nunki
-      [18.92,-26.30, 19.04,-29.88], // Nunki-Ascella
-      [19.04,-29.88, 18.40,-34.38], // Ascella-Kaus Australis
-    ]},
-  { name: 'Pegasus', label: [22.8, 28],
-    lines: [
-      [21.74, 9.87, 23.06,28.08], // Enif-Scheat
-      [23.06,28.08, 23.08,15.21], // Scheat-Markab
-      [23.08,15.21, 0.22,15.18],  // Markab-Algenib
-      [0.22, 15.18, 23.06,28.08], // Algenib-Scheat (close square via Alpheratz)
-    ]},
-  { name: 'Summer △', label: [19.5, 32],
-    lines: [
-      [18.62,38.78, 19.85,8.87],  // Vega-Altair
-      [19.85,8.87,  20.69,45.28], // Altair-Deneb
-      [20.69,45.28, 18.62,38.78], // Deneb-Vega
-    ]},
-  { name: 'Gemini', label: [7.2, 28],
-    lines: [
-      [7.58, 31.89, 7.76,28.03],  // Pollux-Castor
-      [7.58, 31.89, 6.63,16.40],  // Pollux-Alhena
-      [7.76, 28.03, 6.38,22.51],  // Castor-Propus
-    ]},
-  { name: 'Virgo', label: [13.5, -5],
-    lines: [
-      [14.26,19.18, 13.42,-11.16], // Arcturus-Spica
-    ]},
-  { name: 'Pleiades', label: [3.78, 25],
-    lines: [
-      [3.75,24.10, 3.82,24.05],  // Alcyone-Atlas
-      [3.75,24.10, 3.70,23.95],  // Alcyone-Electra
-      [3.75,24.10, 3.76,24.37],  // Alcyone-Maia
-      [3.75,24.10, 3.77,23.86],  // Alcyone-Merope
-    ]},
+  { name: 'Orion', label: [5.55, -1], lines: [
+    [5.92,7.41, 5.42,6.35],[5.24,-8.20, 5.79,-9.67],[5.92,7.41, 5.53,-0.30],
+    [5.42,6.35, 5.53,-0.30],[5.53,-0.30, 5.60,-1.20],[5.60,-1.20, 5.68,-1.94],
+    [5.68,-1.94, 5.79,-9.67],[5.24,-8.20, 5.68,-1.94]]},
+  { name: 'Big Dipper', label: [12.0, 57], lines: [
+    [11.06,61.75, 11.03,56.38],[11.03,56.38, 11.90,53.69],[11.90,53.69, 12.26,57.03],
+    [12.26,57.03, 11.06,61.75],[12.26,57.03, 12.90,55.96],[12.90,55.96, 13.40,54.93],
+    [13.40,54.93, 13.79,49.31]]},
+  { name: 'Little Dipper', label: [15.5, 80], lines: [
+    [2.53,89.26, 17.53,86.58],[17.53,86.58, 16.77,82.04],[16.77,82.04, 15.73,77.79],
+    [15.73,77.79, 14.85,74.16],[14.85,74.16, 15.35,71.83],[15.35,71.83, 16.29,75.75],
+    [16.29,75.75, 15.73,77.79]]},
+  { name: 'Cassiopeia', label: [1.0, 62], lines: [
+    [0.15,59.15, 0.67,56.54],[0.67,56.54, 0.95,60.72],[0.95,60.72, 1.43,60.24],
+    [1.43,60.24, 1.91,63.67]]},
+  { name: 'Cygnus', label: [20.3, 38], lines: [
+    [20.69,45.28, 20.37,40.26],[20.37,40.26, 19.51,27.96],[20.37,40.26, 20.77,33.97],
+    [20.37,40.26, 21.22,30.23]]},
+  { name: 'Scorpius', label: [16.8, -32], lines: [
+    [16.49,-26.43, 16.09,-19.81],[16.09,-19.81, 16.00,-22.62],[16.00,-22.62, 16.36,-25.59],
+    [16.36,-25.59, 16.49,-26.43],[16.49,-26.43, 16.86,-38.05],[16.86,-38.05, 17.62,-42.99],
+    [17.62,-42.99, 17.56,-37.10]]},
+  { name: 'Leo', label: [10.5, 18], lines: [
+    [10.14,11.97, 11.82,14.57],[10.14,11.97, 10.33,19.84],[10.33,19.84, 11.24,20.52],
+    [11.24,20.52, 11.82,14.57]]},
+  { name: 'Sagittarius', label: [18.6, -28], lines: [
+    [18.40,-34.38, 18.35,-29.83],[18.35,-29.83, 18.48,-25.42],[18.35,-29.83, 18.92,-26.30],
+    [18.92,-26.30, 19.04,-29.88],[19.04,-29.88, 18.40,-34.38]]},
+  { name: 'Pegasus', label: [22.8, 28], lines: [
+    [21.74,9.87, 23.06,28.08],[23.06,28.08, 23.08,15.21],[23.08,15.21, 0.22,15.18],
+    [0.22,15.18, 23.06,28.08]]},
+  { name: 'Summer △', label: [19.5, 32], lines: [
+    [18.62,38.78, 19.85,8.87],[19.85,8.87, 20.69,45.28],[20.69,45.28, 18.62,38.78]]},
+  { name: 'Gemini', label: [7.2, 28], lines: [
+    [7.58,31.89, 7.76,28.03],[7.58,31.89, 6.63,16.40],[7.76,28.03, 6.38,22.51]]},
+  { name: 'Virgo', label: [13.5, -5], lines: [[14.26,19.18, 13.42,-11.16]]},
+  { name: 'Pleiades', label: [3.78, 25], lines: [
+    [3.75,24.10, 3.82,24.05],[3.75,24.10, 3.70,23.95],[3.75,24.10, 3.76,24.37],
+    [3.75,24.10, 3.77,23.86]]},
 ];
-
-// Build line geometry
 const _clPos = [];
 for (const c of CONSTELLATIONS) {
   for (const [r1,d1,r2,d2] of c.lines) {
@@ -764,8 +624,6 @@ const _clMat = new THREE.LineBasicMaterial({ color: 0x4488CC, transparent: true,
 const constellationLines = new THREE.LineSegments(_clGeo, _clMat);
 constellationLines.visible = false;
 starGroup.add(constellationLines);
-
-// Build label overlay container
 const _labelDiv = document.createElement('div');
 _labelDiv.id = 'constellation-labels';
 _labelDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;display:none';
@@ -775,17 +633,15 @@ for (const c of CONSTELLATIONS) {
   const el = document.createElement('div');
   el.textContent = c.name;
   el.style.cssText = 'position:absolute;color:rgba(100,180,255,0.7);font:11px Georgia,serif;white-space:nowrap;text-shadow:0 0 4px rgba(0,0,0,0.8);transform:translate(-50%,-50%)';
-  el._rd = rd(c.label[0], c.label[1]); // 3D position (pre-rotation)
+  el._rd = rd(c.label[0], c.label[1]);
   _labelDiv.appendChild(el);
   _labelEls.push(el);
 }
-
 function updateConstellationLabels() {
   if (!constellationsVisible) return;
   const _v = new THREE.Vector3();
   for (const el of _labelEls) {
     _v.copy(el._rd);
-    // Apply starGroup's rotation (sidereal) + position (follows player)
     starGroup.localToWorld(_v);
     _v.project(camera);
     if (_v.z > 1 || _v.z < -1) { el.style.display = 'none'; continue; }
@@ -796,53 +652,114 @@ function updateConstellationLabels() {
 }
 
 // ============================================================
-// SUN + MOON — rendered entirely in the sky dome shader (no billboard sprites).
-// The sky hemisphere covers the full view, so sun glow and moon can NEVER clip
-// at the viewport edge. Sun glow color/intensity and moon disc/glow are all
-// driven via skyMat.uniforms, updated each frame in applyContinuousTime.
+// SUN SPRITE — bright disc that rides the orbit arc
 // ============================================================
-scene.add(camera); // still needed for any future camera children
-
-// Build moon fallback texture — clean white disc, no fake craters.
-// Real moon photo swaps in when loaded; this is just the fallback.
-(function buildMoonShaderTex() {
+(function buildSunSprite() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const ctx = c.getContext('2d');
-  const R = 124;
+  // Glow content is compressed into the inner 25% of the canvas radius.
+  // The outer 75% is fully transparent — when the GPU clips the plane at the
+  // viewport edge it only ever cuts through alpha=0 pixels, so no hard line appears.
+  // The plane is scaled 4× to compensate, keeping the same visual glow size.
+  const g = ctx.createRadialGradient(128,128,0, 128,128,128);
+  g.addColorStop(0,    'rgba(255,255,220,1)');
+  g.addColorStop(0.03, 'rgba(255,240,160,1)');   // original 0.12 × 0.25
+  g.addColorStop(0.07, 'rgba(255,200, 60,0.7)'); // original 0.28 × 0.25
+  g.addColorStop(0.14, 'rgba(255,140, 10,0.25)');// original 0.55 × 0.25
+  g.addColorStop(0.25, 'rgba(255,100,  0,0)');   // fully transparent by 25%
+  g.addColorStop(1.0,  'rgba(255,100,  0,0)');   // outer 75% = zero
+  ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
+  window._sunTex = new THREE.CanvasTexture(c);
+})();
+// Billboard mesh — PlaneGeometry instead of Sprite so GPU clips correctly at frustum edges.
+// Three.js Sprite uses a post-projection vertex offset (÷w) that breaks when the center
+// leaves the frustum; a plain Mesh goes through proper perspective clipping.
+const sunSpriteMat = new THREE.MeshBasicMaterial({
+  map: window._sunTex, transparent: true, depthWrite: false,
+  blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+});
+const sunSprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sunSpriteMat);
+sunSprite.scale.set(500, 500, 1);
+sunSprite.frustumCulled = false;
+camera.add(sunSprite);   // camera child → position in camera space → never frustum-clipped
+scene.add(camera);       // required for camera children to participate in the scene graph
+
+// ============================================================
+// MOON SPRITE — full moon disc with craters
+// ============================================================
+(function buildMoonSprite() {
+  // Clean white disc at 25% of canvas radius. No fake craters.
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  const DR = 32;
   ctx.save();
-  ctx.beginPath(); ctx.arc(128,128,R,0,Math.PI*2); ctx.clip();
-  // Simple clean white disc with subtle limb darkening
-  const base = ctx.createRadialGradient(128,128,0, 128,128,R);
+  ctx.beginPath(); ctx.arc(128,128,DR,0,Math.PI*2); ctx.clip();
+  const base = ctx.createRadialGradient(128,128,0, 128,128,DR);
   base.addColorStop(0,    'rgba(255,253,245,1)');
   base.addColorStop(0.75, 'rgba(250,248,238,1)');
   base.addColorStop(1.0,  'rgba(230,225,215,1)');
   ctx.fillStyle = base; ctx.fillRect(0,0,256,256);
   ctx.restore();
-  const tex = new THREE.CanvasTexture(c);
-  skyMat.uniforms.moonTex.value = tex;
+  window._moonTex = new THREE.CanvasTexture(c);
 })();
-
-// Load real moon photo and swap into sky shader.
-// Try relative path first (works on GitHub Pages), fall back to west-texas/ subfolder (dev file).
-const _moonUrl = document.location.pathname.includes('west-texas') ? './moon.jpg' : './west-texas/moon.jpg';
+// alphaTest puts the moon in the OPAQUE pass — it renders before stars and writes
+// to the depth buffer. Stars are in the transparent pass and fail the depth test
+// behind the moon, so they can never show through it.
+// MeshBasicMaterial + PlaneGeometry billboard (same fix as sun — avoids Sprite ÷w clipping)
+const moonSpriteMat = new THREE.MeshBasicMaterial({
+  map: window._moonTex, alphaTest: 0.08, depthWrite: true,
+  transparent: true, side: THREE.DoubleSide,
+});
+// Load a real moon photo and swap it in once downloaded.
 new THREE.TextureLoader().load(
-  _moonUrl,
+  './moon.jpg',  // local copy — no CORS issues
   tex => {
-    const c2 = document.createElement('canvas'); c2.width = c2.height = 512;
+    // Same 25%-radius layout as the procedural texture: disc at radius 256 on a 1024 canvas.
+    const c2 = document.createElement('canvas'); c2.width = c2.height = 1024;
     const x2 = c2.getContext('2d');
     const img = tex.image;
-    const R = 248; // disc fills canvas
+    const PR = 256; // photo disc radius = 25% of half-canvas (512)
     x2.save();
-    x2.beginPath(); x2.arc(256, 256, R, 0, Math.PI * 2); x2.clip();
-    x2.drawImage(img, 256 - R, 256 - R, R * 2, R * 2);
+    x2.beginPath(); x2.arc(512, 512, PR, 0, Math.PI * 2); x2.clip();
+    x2.drawImage(img, 512 - PR, 512 - PR, PR * 2, PR * 2);
     x2.restore();
     const realTex = new THREE.CanvasTexture(c2);
-    skyMat.uniforms.moonTex.value = realTex;
+    moonSpriteMat.map = realTex;
+    moonSpriteMat.needsUpdate = true;
     tex.dispose();
   },
   undefined,
   () => { /* fetch failed — keep procedural texture */ }
 );
+const moonSprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), moonSpriteMat);
+moonSprite.scale.set(700, 700, 1);
+moonSprite.frustumCulled = false;
+camera.add(moonSprite);  // camera child — no frustum clipping
+
+// Glow halo — billboard mesh, same pattern
+(function buildMoonGlow() {
+  // Glow content compressed to inner 25% — same transparent-border approach as sun/moon disc.
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(128,128,0, 128,128,128);
+  g.addColorStop(0,     'rgba(220,235,255,0.0)');
+  g.addColorStop(0.105, 'rgba(200,220,255,0.12)'); // original 0.42 × 0.25
+  g.addColorStop(0.17,  'rgba(150,185,240,0.18)'); // original 0.68 × 0.25
+  g.addColorStop(0.25,  'rgba(0,0,0,0)');           // fully transparent by 25%
+  g.addColorStop(1.0,   'rgba(0,0,0,0)');           // outer 75% = zero
+  ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
+  window._moonGlowTex = new THREE.CanvasTexture(c);
+})();
+const moonGlowMat = new THREE.MeshBasicMaterial({
+  map: window._moonGlowTex, transparent: true, opacity: 0,
+  blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true,
+  side: THREE.DoubleSide,
+});
+const moonGlowSprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), moonGlowMat);
+moonGlowSprite.scale.set(820, 820, 1);
+moonGlowSprite.renderOrder = 1;
+moonGlowSprite.frustumCulled = false;
+camera.add(moonGlowSprite); // camera child — no frustum clipping
 
 // ============================================================
 // GROUND — single huge plane that follows the player.
@@ -1100,7 +1017,7 @@ function applyContinuousTime(dt) {
   // Sun: fade near horizon
   const sunFade = THREE.MathUtils.clamp(sunPos.y / 15, 0, 1);
   const sunDir = sunPos.clone().normalize();
-  // sunDir used below for sky uniforms, lighting, etc.
+  _lastSunDir.copy(sunDir); // saved for camera-space positioning in animate loop
 
   // Moon visibility — two-part:
   // 1) Time-of-day window: fades in over 1 h after MOON_RISE, out 1 h before MOON_SET.
@@ -1125,6 +1042,7 @@ function applyContinuousTime(dt) {
   const { lf, lc, lo, hi } = lerpSkyState(timeOfDay);
 
   // Sky uniforms
+  // (sunDir already set above, saved into _lastSunDir for animate loop camera-space placement)
   // When sun is below horizon we still want the horizon glow to track
   // where the sun just disappeared, so pass clamped-y direction.
   const horizDir = new THREE.Vector3(sunPos.x, Math.max(sunPos.y, -50), sunPos.z).normalize();
@@ -1177,25 +1095,34 @@ function applyContinuousTime(dt) {
   const _starAngle = ((timeOfDay % 24) / 24) * Math.PI * 2;
   starGroup.setRotationFromAxisAngle(POLARIS_DIR, _starAngle);
 
-  // Sun glow — rendered in sky shader. Drive color from elevation.
+  // Sun sprite — position now set in animate loop (camera-space child)
+  // Color tint: warm orange at sunrise/set, white at noon
   const sunElevation = THREE.MathUtils.clamp(sunDir.y, 0, 1);
-  const _sgc = skyMat.uniforms.sunGlowColor.value;
-  _sgc.setHSL(0.08 - sunElevation * 0.08, 1 - sunElevation * 0.8, 0.85);
-  skyMat.uniforms.sunGlowIntensity.value = sunFade;
+  sunSpriteMat.color.setHSL(0.08 - sunElevation * 0.08, 1 - sunElevation * 0.8, 1);
+  sunSpriteMat.opacity = sunFade;
+  // Scale up when near horizon (atmospheric magnification).
+  // ×4 because glow content is compressed into center 25% of the canvas —
+  // same visual size, but 75% transparent border so viewport clips never show.
+  const sunScale = (500 + (1 - sunElevation) * 300) * 4;
+  sunSprite.scale.set(sunScale, sunScale, 1);
 
-  // Moon — rendered in sky shader. No billboard sprites needed.
+  // Moon sprite — position now set in animate loop (camera-space child)
   const moonDir = moonPos.clone().normalize();
-  skyMat.uniforms.moonDirection.value.copy(moonDir);
+  _lastMoonDir.copy(moonDir); // saved for camera-space positioning in animate loop
 
-  // moonVis = time-of-day window × horizon fade
+  // moonVis = time-of-day window × horizon fade (fully slider-driven, replaces KMOON keyframe)
   const moonVis = moonTimeVis * moonFade;
 
-  // Angular size of moon disc in radians (MOON_SIZE is visual diameter in world units at SKY_DIST)
-  skyMat.uniforms.moonDiscSize.value = (MOON_SIZE / 2) / SKY_DIST;
-  skyMat.uniforms.moonDiscIntensity.value = moonVis;
-  skyMat.uniforms.moonDiscColor.value.setScalar(MOON_BRIGHT);
-  skyMat.uniforms.moonGlowIntensity.value = MOON_GLOW_OP * MOON_BRIGHT;
-  skyMat.uniforms.moonGlowMult.value = MOON_GLOW_MULT;
+  // Size — driven by MOON_SIZE slider. ×4 because disc/glow are in center 25% of canvas.
+  moonSprite.scale.set(MOON_SIZE * 4, MOON_SIZE * 4, 1);
+  moonGlowSprite.scale.set(MOON_SIZE * MOON_GLOW_MULT * 4, MOON_SIZE * MOON_GLOW_MULT * 4, 1);
+
+  moonSpriteMat.opacity = moonVis;
+  // MOON_BRIGHT is a pure exposure multiplier applied directly to the texture pixels.
+  // 0=off, 1=photo as-is, 2=double exposure. ACESFilmic tone mapping handles >1
+  // gracefully — highlights compress naturally, detail is preserved, never just white.
+  moonSpriteMat.color.setScalar(MOON_BRIGHT);
+  moonGlowMat.opacity = moonVis * MOON_GLOW_OP * MOON_BRIGHT;
 
   // Moon directional light: cool blue, casts shadows at night
   moonDirLight.position.set(
@@ -1353,7 +1280,23 @@ function animate() {
   euler.y = -lookYaw;
   euler.x = skyView ? Math.PI / 2 : lookPitch; // sky view forces straight up
   camera.quaternion.setFromEuler(euler);
-  // Sun/moon are now rendered in the sky dome shader — no billboard positioning needed.
+  // Sun/moon billboards: position in camera space. No fade needed — the textures have
+  // a 75% transparent border so the GPU viewport clip always hits alpha=0 pixels.
+  {
+    const _invQ = camera.quaternion.clone().invert();
+    // Sun
+    const _sc = _lastSunDir.clone().applyQuaternion(_invQ);
+    sunSprite.visible = _sc.z < 0;
+    if (_sc.z < 0) sunSprite.position.set(_sc.x*SKY_DIST, _sc.y*SKY_DIST, _sc.z*SKY_DIST);
+    // Moon + glow
+    const _mc = _lastMoonDir.clone().applyQuaternion(_invQ);
+    moonSprite.visible    = _mc.z < 0;
+    moonGlowSprite.visible = _mc.z < 0;
+    if (_mc.z < 0) {
+      moonSprite.position.set(_mc.x*SKY_DIST, _mc.y*SKY_DIST, _mc.z*SKY_DIST);
+      moonGlowSprite.position.set(_mc.x*(SKY_DIST-10), _mc.y*(SKY_DIST-10), _mc.z*(SKY_DIST-10));
+    }
+  }
 
   // Sky, stars, mountains all ride along with the camera.
   skyDome.position.set(player.x, 0, player.z);
@@ -1414,7 +1357,6 @@ window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
-  skyMat.uniforms.resolution.value.set(innerWidth, innerHeight);
 });
 </script>
 </body>
