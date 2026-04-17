@@ -66,7 +66,7 @@ canvas { display: block; }
 <div id="compass-wrap"><canvas id="compass-canvas" width="100" height="100"></canvas></div>
 <div id="minimap"><canvas id="minimap-canvas" width="320" height="320"></canvas></div>
 <div id="tweaks" style="position:fixed;top:10px;left:10px;background:rgba(0,0,0,0.55);color:#eee;font:12px monospace;padding:10px 12px;border-radius:6px;z-index:10;line-height:1.6;pointer-events:auto;min-width:210px">
-  <div style="font-weight:bold;margin-bottom:2px">Tweaks &nbsp;<span style="font-weight:normal;opacity:0.6;font-size:10px">Tab=select &nbsp; - / = adjust</span></div>
+  <div style="font-weight:bold;margin-bottom:2px">Tweaks &nbsp;<span style="font-weight:normal;opacity:0.6;font-size:10px">Tab=select &nbsp; - / = adjust &nbsp; H=hide</span></div>
   <div style="opacity:0.6;font-size:10px;margin-bottom:2px">— Movement —</div>
   <div id="tr-turn"  ><span id="tc-turn"  style="color:#FFD700;width:10px;display:inline-block"> </span>Turn speed: <span id="tv-turn">1.80</span> <button data-tw="turn"  data-d="-1">−</button><button data-tw="turn"  data-d="1">+</button></div>
   <div id="tr-mouse" ><span id="tc-mouse" style="color:#FFD700;width:10px;display:inline-block"> </span>Mouse sens: <span id="tv-mouse">0.0020</span> <button data-tw="mouse" data-d="-1">−</button><button data-tw="mouse" data-d="1">+</button></div>
@@ -562,13 +562,16 @@ scene.add(starGroup);
   ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
   window._sunTex = new THREE.CanvasTexture(c);
 })();
-const sunSpriteMat = new THREE.SpriteMaterial({
+// Billboard mesh — PlaneGeometry instead of Sprite so GPU clips correctly at frustum edges.
+// Three.js Sprite uses a post-projection vertex offset (÷w) that breaks when the center
+// leaves the frustum; a plain Mesh goes through proper perspective clipping.
+const sunSpriteMat = new THREE.MeshBasicMaterial({
   map: window._sunTex, transparent: true, depthWrite: false,
-  blending: THREE.AdditiveBlending,
+  blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
 });
-const sunSprite = new THREE.Sprite(sunSpriteMat);
+const sunSprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sunSpriteMat);
 sunSprite.scale.set(500, 500, 1);
-sunSprite.frustumCulled = false; // prevent clipping when sun is near frustum edge
+sunSprite.frustumCulled = false;
 scene.add(sunSprite);
 
 // ============================================================
@@ -604,19 +607,17 @@ scene.add(sunSprite);
 // alphaTest puts the moon in the OPAQUE pass — it renders before stars and writes
 // to the depth buffer. Stars are in the transparent pass and fail the depth test
 // behind the moon, so they can never show through it.
-const moonSpriteMat = new THREE.SpriteMaterial({
+// MeshBasicMaterial + PlaneGeometry billboard (same fix as sun — avoids Sprite ÷w clipping)
+const moonSpriteMat = new THREE.MeshBasicMaterial({
   map: window._moonTex, alphaTest: 0.08, depthWrite: true,
+  transparent: true, side: THREE.DoubleSide,
 });
-// Load a real moon photo from the Three.js CDN and swap it in once downloaded.
-// Falls back to the procedural canvas texture above if the load fails.
+// Load a real moon photo and swap it in once downloaded.
 new THREE.TextureLoader().load(
   './moon.jpg',  // local copy — no CORS issues
   tex => {
-    // The photo is a square JPEG — wrap it inside a clipped canvas circle so
-    // the sprite stays round and the alphaTest edge is clean.
     const c2 = document.createElement('canvas'); c2.width = c2.height = 1024;
     const x2 = c2.getContext('2d');
-    // Draw a white circle mask first so corners become transparent-via-alphaTest
     const img = tex.image;
     x2.save();
     x2.beginPath(); x2.arc(512, 512, 508, 0, Math.PI * 2); x2.clip();
@@ -625,39 +626,34 @@ new THREE.TextureLoader().load(
     const realTex = new THREE.CanvasTexture(c2);
     moonSpriteMat.map = realTex;
     moonSpriteMat.needsUpdate = true;
-    tex.dispose(); // free the raw JPEG texture
+    tex.dispose();
   },
   undefined,
   () => { /* fetch failed — keep procedural texture */ }
 );
-const moonSprite = new THREE.Sprite(moonSpriteMat);
+const moonSprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), moonSpriteMat);
 moonSprite.scale.set(700, 700, 1);
-moonSprite.frustumCulled = false; // prevent clipping near frustum edge
+moonSprite.frustumCulled = false;
 scene.add(moonSprite);
 
-// White additive glow — makes moon look like a bright white ball when high in sky.
-// Near horizon the glow fades and the texture sprite shows through (craters visible).
-// Glow needs a circular gradient texture — no map = solid rectangle (the box bug)
+// Glow halo — billboard mesh, same pattern
 (function buildMoonGlow() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const ctx = c.getContext('2d');
-  // Glow is a soft outer halo only — no bright opaque center so the moon disc
-  // texture shows clearly. The disc provides the solid round appearance; this
-  // just adds a gentle atmospheric nimbus around it.
   const g = ctx.createRadialGradient(128,128,0, 128,128,128);
-  g.addColorStop(0,    'rgba(220,235,255,0.0)');   // transparent center — disc shows through
-  g.addColorStop(0.42, 'rgba(200,220,255,0.12)');  // subtle inner glow
-  g.addColorStop(0.68, 'rgba(150,185,240,0.18)');  // halo peak
+  g.addColorStop(0,    'rgba(220,235,255,0.0)');
+  g.addColorStop(0.42, 'rgba(200,220,255,0.12)');
+  g.addColorStop(0.68, 'rgba(150,185,240,0.18)');
   g.addColorStop(1.0,  'rgba(0,0,0,0)');
   ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
   window._moonGlowTex = new THREE.CanvasTexture(c);
 })();
-const moonGlowMat = new THREE.SpriteMaterial({
+const moonGlowMat = new THREE.MeshBasicMaterial({
   map: window._moonGlowTex, transparent: true, opacity: 0,
   blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true,
-  // depthTest:true means mountains occlude the glow correctly when moon sets
+  side: THREE.DoubleSide,
 });
-const moonGlowSprite = new THREE.Sprite(moonGlowMat);
+const moonGlowSprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), moonGlowMat);
 moonGlowSprite.scale.set(820, 820, 1);
 moonGlowSprite.renderOrder = 1;
 moonGlowSprite.frustumCulled = false;
@@ -851,6 +847,11 @@ document.addEventListener('keydown', e => {
   // = key (no shift needed) increases, - key decreases the selected param
   if (e.code === 'Equal')  { adjustTweak(TWEAK_LIST[selectedTweakIdx],  1); }
   if (e.code === 'Minus')  { adjustTweak(TWEAK_LIST[selectedTweakIdx], -1); }
+  // H: hide/show tweaks panel
+  if (e.code === 'KeyH') {
+    const tw = document.getElementById('tweaks');
+    tw.style.display = tw.style.display === 'none' ? 'block' : 'none';
+  }
   // C: toggle real-clock sync
   if (e.code === 'KeyC') { SYNC_CLOCK = !SYNC_CLOCK; refreshTweaks(); }
   // V: toggle overhead sky view — 140° FOV looking straight up
@@ -1157,6 +1158,11 @@ function animate() {
   euler.y = -lookYaw;
   euler.x = skyView ? Math.PI / 2 : lookPitch; // sky view forces straight up
   camera.quaternion.setFromEuler(euler);
+  // Billboard planes: copy camera orientation so sun/moon/glow always face the lens.
+  // Done here — after setFromEuler — so we use the current frame's quaternion, not last frame's.
+  sunSprite.quaternion.copy(camera.quaternion);
+  moonSprite.quaternion.copy(camera.quaternion);
+  moonGlowSprite.quaternion.copy(camera.quaternion);
 
   // Sky, stars, mountains all ride along with the camera.
   skyDome.position.set(player.x, 0, player.z);
