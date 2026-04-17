@@ -338,6 +338,9 @@ const skyMat = new THREE.ShaderMaterial({
       float sunDot = dot(normalize(vec3(dir.x, 0.0, dir.z)), normalize(vec3(sunDirection.x, 0.0, sunDirection.z)));
       vec3 hCol = mix(horizonFar, horizonNear, smoothstep(-0.3, 1.0, sunDot));
       col = mix(col, hCol, smoothstep(0.15, 0.0, h) * smoothstep(-0.05, 0.02, h) * 0.8);
+      // Capture base sky luminance BEFORE sun/moon glow for alpha calculation.
+      // This prevents the glow from creating rings in the transparency.
+      float baseLum = dot(col, vec3(0.299, 0.587, 0.114));
 
       // === SUN — screen-space for distortion-free circles ===
       float _sDist = length(gl_FragCoord.xy - vSunPx);
@@ -365,10 +368,9 @@ const skyMat = new THREE.ShaderMaterial({
         col = mix(col, mt.rgb * moonDiscColor, mBlend);
         moonSolid = mBlend; // moon disc is solid — blocks stars
       }
-      // Alpha: sky brightness → opaque (hides stars by day), dark → transparent
-      // (stars show through at night). Moon disc forces alpha=1 (solid).
-      float skyLum = dot(col, vec3(0.299, 0.587, 0.114));
-      float skyAlpha = clamp(skyLum * 5.0, 0.0, 1.0);
+      // Alpha from BASE sky (before sun/moon glow) — smooth gradient,
+      // no rings from glow falloff. Day sky = opaque, night = transparent.
+      float skyAlpha = clamp(baseLum * 5.0, 0.0, 1.0);
       gl_FragColor = vec4(col, max(skyAlpha, moonSolid));
     }`
 });
