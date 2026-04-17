@@ -342,9 +342,10 @@ const skyMat = new THREE.ShaderMaterial({
       // === SUN — screen-space for distortion-free circles ===
       float _sDist = length(gl_FragCoord.xy - vSunPx);
       float sn = _sDist / max(vSunDiscPx, 1.0); // 0=center, 1=disc edge
-      col += sunGlowColor * exp(-sn*sn*0.0007) * sunGlowIntensity * 0.15 * vSunVis;
-      col += sunGlowColor * exp(-sn*sn*0.004)  * sunGlowIntensity * 0.3  * vSunVis;
-      col += sunGlowColor * exp(-sn*sn*0.012)  * sunGlowIntensity * 0.5  * vSunVis;
+      // Single smooth power-law glow — no banding, monotonic falloff
+      float sunGlow = 1.0 / (1.0 + sn * sn * 0.004);
+      col += sunGlowColor * sunGlow * sunGlowIntensity * 0.45 * vSunVis;
+      // Disc core (additive — always brightest point)
       float discMask = smoothstep(1.1, 0.4, sn);
       col += sunDiscColor * discMask * sunDiscIntensity * 1.5 * vSunVis;
 
