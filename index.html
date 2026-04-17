@@ -82,6 +82,11 @@ canvas { display: block; }
   <div id="tr-mrise" ><span id="tc-mrise" style="color:#FFD700;width:10px;display:inline-block"> </span>Rise hr: <span id="tv-mrise">19.0</span> <button data-tw="mrise" data-d="-1">−</button><button data-tw="mrise" data-d="1">+</button></div>
   <div id="tr-mset"  ><span id="tc-mset"  style="color:#FFD700;width:10px;display:inline-block"> </span>Set hr: <span id="tv-mset">6.0</span> <button data-tw="mset"  data-d="-1">−</button><button data-tw="mset"  data-d="1">+</button></div>
   <div id="tr-mfade" ><span id="tc-mfade" style="color:#FFD700;width:10px;display:inline-block"> </span>Horiz fade: <span id="tv-mfade">4</span> <button data-tw="mfade" data-d="-1">−</button><button data-tw="mfade" data-d="1">+</button></div>
+  <div style="opacity:0.6;font-size:10px;margin:3px 0 2px">— Stars —</div>
+  <div id="tr-sbright"><span id="tc-sbright" style="color:#FFD700;width:10px;display:inline-block"> </span>Brightness:  <span id="tv-sbright">1.0</span> <button data-tw="sbright" data-d="-1">−</button><button data-tw="sbright" data-d="1">+</button></div>
+  <div id="tr-ssz"   ><span id="tc-ssz"    style="color:#FFD700;width:10px;display:inline-block"> </span>Star size:   <span id="tv-ssz">1.0</span> <button data-tw="ssz"    data-d="-1">−</button><button data-tw="ssz"    data-d="1">+</button></div>
+  <div id="tr-sfsz"  ><span id="tc-sfsz"   style="color:#FFD700;width:10px;display:inline-block"> </span>Field size:  <span id="tv-sfsz">1.5</span> <button data-tw="sfsz"   data-d="-1">−</button><button data-tw="sfsz"   data-d="1">+</button></div>
+  <div id="tr-smwsz" ><span id="tc-smwsz"  style="color:#FFD700;width:10px;display:inline-block"> </span>MW size:     <span id="tv-smwsz">1.5</span> <button data-tw="smwsz"  data-d="-1">−</button><button data-tw="smwsz"  data-d="1">+</button></div>
 </div>
 
 <script type="importmap">
@@ -108,6 +113,10 @@ let MOON_GLOW_OP   = 0.45; // glow opacity at full visibility
 let MOON_RISE      = 19.0; // hour moon fades IN  (default ~7 pm)
 let MOON_SET       = 6.0;  // hour moon fades OUT (default ~6 am)
 let MOON_FADE_ALT  = 4;    // moon altitude (y world-units) where horizon fade completes
+let STAR_BRIGHT     = 1.0; // opacity multiplier on top of keyframe value
+let STAR_NAMED_SIZE = 1.0; // size multiplier for named constellation stars (applied to 4.5/3.0/2.0 base)
+let STAR_FIELD_SIZE = 1.5; // pixel size for background field stars
+let STAR_MW_SIZE    = 1.5; // pixel size for Milky Way band stars
 
 // Returns the shortest signed delta from a to b on a wrap of size W.
 // Result is in [-W/2, W/2].
@@ -776,7 +785,7 @@ let skyView = false; // V key: overhead fisheye look at the full sky dome
 // ============================================================
 // TWEAKS — Tab cycles selection, - / = adjusts, buttons also work
 // ============================================================
-const TWEAK_LIST = ['turn','mouse','walk','run','night','moon','msize','mgsize','mgop','mrise','mset','mfade'];
+const TWEAK_LIST = ['turn','mouse','walk','run','night','moon','msize','mgsize','mgop','mrise','mset','mfade','sbright','ssz','sfsz','smwsz'];
 let selectedTweakIdx = 5; // start on Moon Brightness
 
 function refreshTweaks() {
@@ -791,7 +800,11 @@ function refreshTweaks() {
   document.getElementById('tv-mgop').textContent   = MOON_GLOW_OP.toFixed(2);
   document.getElementById('tv-mrise').textContent  = MOON_RISE.toFixed(1);
   document.getElementById('tv-mset').textContent   = MOON_SET.toFixed(1);
-  document.getElementById('tv-mfade').textContent  = MOON_FADE_ALT.toFixed(0);
+  document.getElementById('tv-mfade').textContent   = MOON_FADE_ALT.toFixed(0);
+  document.getElementById('tv-sbright').textContent = STAR_BRIGHT.toFixed(1);
+  document.getElementById('tv-ssz').textContent     = STAR_NAMED_SIZE.toFixed(1);
+  document.getElementById('tv-sfsz').textContent    = STAR_FIELD_SIZE.toFixed(1);
+  document.getElementById('tv-smwsz').textContent   = STAR_MW_SIZE.toFixed(1);
   // Update cursor indicators
   for (const key of TWEAK_LIST) {
     const el = document.getElementById('tc-' + key);
@@ -810,7 +823,11 @@ function adjustTweak(kind, dir) {
   if (kind === 'mgop')   MOON_GLOW_OP   = Math.max(0,      MOON_GLOW_OP   + dir * 0.05);
   if (kind === 'mrise')  MOON_RISE      = ((MOON_RISE      + dir * 0.5 + 24) % 24);
   if (kind === 'mset')   MOON_SET       = ((MOON_SET       + dir * 0.5 + 24) % 24);
-  if (kind === 'mfade')  MOON_FADE_ALT  = Math.max(1,      MOON_FADE_ALT  + dir * 1);
+  if (kind === 'mfade')  MOON_FADE_ALT   = Math.max(1,   MOON_FADE_ALT   + dir * 1);
+  if (kind === 'sbright') STAR_BRIGHT    = Math.max(0,   STAR_BRIGHT     + dir * 0.1);
+  if (kind === 'ssz')     STAR_NAMED_SIZE= Math.max(0.1, STAR_NAMED_SIZE + dir * 0.1);
+  if (kind === 'sfsz')    STAR_FIELD_SIZE= Math.max(0.3, STAR_FIELD_SIZE + dir * 0.2);
+  if (kind === 'smwsz')   STAR_MW_SIZE   = Math.max(0.3, STAR_MW_SIZE    + dir * 0.2);
   refreshTweaks();
 }
 
@@ -938,9 +955,13 @@ function applyContinuousTime(dt) {
   // Exposure — also pushed up at night by NIGHT_BRIGHT so tone mapping amplifies moon/ambient
   renderer.toneMappingExposure = lf(lo[KEXPO], hi[KEXPO]) + nightFactor * NIGHT_BRIGHT * 0.5;
 
-  // Stars — update opacity for all point clouds + sidereal rotation around Polaris
-  const _starOp = lf(lo[KSTARS], hi[KSTARS]);
-  for (const _sm of allStarMats) _sm.opacity = _starOp;
+  // Stars — update opacity (keyframe × brightness slider) + live sizes + sidereal rotation
+  const _starOp = lf(lo[KSTARS], hi[KSTARS]) * STAR_BRIGHT;
+  brightMat.opacity = _starOp;  brightMat.size = 4.5 * STAR_NAMED_SIZE;
+  medMat.opacity    = _starOp;  medMat.size    = 3.0 * STAR_NAMED_SIZE;
+  dimMat.opacity    = _starOp;  dimMat.size    = 2.0 * STAR_NAMED_SIZE;
+  bgMat.opacity     = _starOp;  bgMat.size     = STAR_FIELD_SIZE;
+  mwMat.opacity     = _starOp;  mwMat.size     = STAR_MW_SIZE;
   // Sidereal rotation: one full revolution per 24h around the polar axis.
   // Use modulo to keep angle in [0, 2π) so there's no jump at day rollover.
   const _starAngle = ((timeOfDay % 24) / 24) * Math.PI * 2;
@@ -1075,6 +1096,7 @@ function drawCompass(northAngle) {
 const clock = new THREE.Clock();
 const euler = new THREE.Euler(0, 0, 0, 'YXZ');
 const walkBob = { phase: 0 };
+let _wrapSkip = 0; // frames to skip render after a world-wrap (hides one-frame pop)
 
 function animate() {
   requestAnimationFrame(animate);
@@ -1108,9 +1130,11 @@ function animate() {
       const step = moveAmount * speed * dt;
       player.x += fx * step;
       player.z += fz * step;
-      // Wrap to [-HALF, HALF)
+      // Wrap to [-HALF, HALF) — track when a wrap occurs so we can suppress that frame's render
+      const _px0 = player.x, _pz0 = player.z;
       player.x = ((player.x + HALF) % WORLD_SIZE + WORLD_SIZE) % WORLD_SIZE - HALF;
       player.z = ((player.z + HALF) % WORLD_SIZE + WORLD_SIZE) % WORLD_SIZE - HALF;
+      if (Math.abs(player.x - _px0) > HALF || Math.abs(player.z - _pz0) > HALF) _wrapSkip = 2;
       walkBob.phase += dt * (speed === RUN_SPEED ? 12 : 8);
     }
   }
@@ -1170,6 +1194,8 @@ function animate() {
     `X ${player.x.toFixed(0)}  Z ${player.z.toFixed(0)}`;
 
   drawMinimap();
+  // Skip 2 frames after a wrap to hide the one-frame shadow/object pop at the boundary
+  if (_wrapSkip > 0) { _wrapSkip--; return; }
   renderer.render(scene, camera);
 }
 animate();
