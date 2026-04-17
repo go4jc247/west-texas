@@ -72,9 +72,10 @@ canvas { display: block; }
   <div>Walk: <span id="tv-walk">30</span> <button data-tw="walk" data-d="-1">−</button><button data-tw="walk" data-d="1">+</button></div>
   <div>Run: <span id="tv-run">65</span> <button data-tw="run" data-d="-1">−</button><button data-tw="run" data-d="1">+</button></div>
   <div>Night bright: <span id="tv-night">3.0</span> <button data-tw="night" data-d="-1">−</button><button data-tw="night" data-d="1">+</button></div>
+  <div>Moon bright: <span id="tv-moon">1.00</span> <button data-tw="moon" data-d="-1">−</button><button data-tw="moon" data-d="1">+</button></div>
   <div style="margin-top:4px;opacity:0.7;font-size:11px">
     [ ] turn &nbsp; ; ' mouse<br>
-    , . walk &nbsp; K L run &nbsp; N M night
+    , . walk &nbsp; K L run &nbsp; N M night &nbsp; O P moon
   </div>
 </div>
 
@@ -95,6 +96,7 @@ let RUN_SPEED = 65;
 let TURN_SPEED = 1.8;
 let MOUSE_SENS = 0.002;
 let NIGHT_BRIGHT = 0.50; // ADDITIVE ambient added at night on top of keyframe value (0=dark, no upper limit)
+let MOON_BRIGHT  = 1.00; // Moon disc brightness multiplier (0=off, 1=natural, 2=blinding white)
 
 // Returns the shortest signed delta from a to b on a wrap of size W.
 // Result is in [-W/2, W/2].
@@ -519,6 +521,8 @@ document.addEventListener('keydown', e => {
   } else if (e.code === 'KeyL')         { adjustTweak('run', 1);
   } else if (e.code === 'KeyN')         { adjustTweak('night', -1);
   } else if (e.code === 'KeyM')         { adjustTweak('night', 1);
+  } else if (e.code === 'KeyO')         { adjustTweak('moon', -1);
+  } else if (e.code === 'KeyP')         { adjustTweak('moon', 1);
   }
   if (locked) e.preventDefault();
 });
@@ -530,6 +534,7 @@ function refreshTweaks() {
   document.getElementById('tv-walk').textContent = WALK_SPEED.toFixed(0);
   document.getElementById('tv-run').textContent = RUN_SPEED.toFixed(0);
   document.getElementById('tv-night').textContent = NIGHT_BRIGHT.toFixed(2);
+  document.getElementById('tv-moon').textContent  = MOON_BRIGHT.toFixed(2);
 }
 function adjustTweak(kind, dir) {
   if (kind === 'turn')  TURN_SPEED  = Math.max(0.1, TURN_SPEED  + dir * 0.1);
@@ -537,6 +542,7 @@ function adjustTweak(kind, dir) {
   if (kind === 'walk')  WALK_SPEED  = Math.max(1, WALK_SPEED + dir * 5);
   if (kind === 'run')   RUN_SPEED   = Math.max(1, RUN_SPEED  + dir * 5);
   if (kind === 'night') NIGHT_BRIGHT = Math.max(0, NIGHT_BRIGHT + dir * 0.1);
+  if (kind === 'moon')  MOON_BRIGHT  = Math.max(0, MOON_BRIGHT  + dir * 0.1);
   refreshTweaks();
 }
 document.querySelectorAll('#tweaks button').forEach(b => {
@@ -653,7 +659,11 @@ function applyContinuousTime(dt) {
   // Texture sprite: always present but washed out when high (white ball).
   // Near horizon the glow backs off and craters become visible.
   moonSpriteMat.opacity = moonVis;
-  moonGlowMat.opacity = moonVis * 0.45;  // subtle halo, not a competing bright layer
+  // MOON_BRIGHT multiplies the disc color: 1.0 = natural cream-white, >1 = blown-out white
+  const mb = Math.min(MOON_BRIGHT, 1.0);
+  const mbOver = Math.max(0, MOON_BRIGHT - 1.0);  // above 1 shifts toward pure white
+  moonSpriteMat.color.setRGB(mb + mbOver, mb + mbOver * 0.97, mb + mbOver * 0.92);
+  moonGlowMat.opacity = moonVis * 0.45 * MOON_BRIGHT;  // glow scales with brightness
 
   // Moon directional light: cool blue, casts shadows at night
   moonDirLight.position.set(
