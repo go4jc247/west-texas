@@ -838,21 +838,67 @@ const boardwalkZones = [];
 function initTownColliders(tx, tz) {
   townOriginX = tx; townOriginZ = tz;
   const S = 1.5, STREET_W = 20, BOARD_W = 4, BOARD_H = 1.0, townLen = 80;
-  for (const b of [
-    { w:12, d:16, x:-30 }, { w:14, d:18, x:-15 }, { w:8, d:14, x:-4 },
-    { w:14, d:16, x:9 },   { w:8, d:12, x:20 },   { w:14, d:20, x:32 },
-  ]) colliders.push({ cx: tx+b.x*S, cz: tz+(STREET_W/2+BOARD_W+b.d/2)*S, hw: b.w/2*S, hd: b.d/2*S });
-  for (const b of [
-    { w:10, d:14, x:-27 }, { w:12, d:16, x:-14 }, { w:8, d:12, x:-4 },
-    { w:10, d:14, x:7 },   { w:10, d:16, x:18 },   { w:10, d:16, x:29 },
-  ]) colliders.push({ cx: tx+b.x*S, cz: tz-(STREET_W/2+BOARD_W+b.d/2)*S, hw: b.w/2*S, hd: b.d/2*S });
+  const WT = 0.3; // wall thickness for colliders
+  const doorW = 2.6; // door opening width (matches bldg())
+
+  // Helper: add wall colliders for one building with open doorway
+  // side: 1 = north (+Z), -1 = south (-Z). doorX = door offset (0=center)
+  function addBldgWalls(b, side, doorX) {
+    const cx = tx + b.x * S;
+    const cz = tz + side * (STREET_W/2 + BOARD_W + b.d/2) * S;
+    const hw = b.w/2 * S, hd = b.d/2 * S;
+    const dw = doorW/2 * S; // half door width in world
+    // For north side (rotated PI): front face is at cz - hd, door X is mirrored
+    // For south side (no rotation): front face is at cz + hd
+    const frontZ = cz - side * hd; // front face world Z
+    const dxWorld = side === 1 ? cx - doorX * S : cx + doorX * S; // door center X (PI rotation mirrors X)
+
+    // Back wall (full width)
+    colliders.push({ cx: cx, cz: cz + side * hd, hw: hw, hd: WT * S });
+    // Left wall (full depth)
+    colliders.push({ cx: cx - hw, cz: cz, hw: WT * S, hd: hd });
+    // Right wall (full depth)
+    colliders.push({ cx: cx + hw, cz: cz, hw: WT * S, hd: hd });
+    // Front wall LEFT of door
+    const flEdge = cx - hw; // left edge of building
+    const flW = (dxWorld - dw) - flEdge; // width of front-left segment
+    if (flW > 0.2) colliders.push({ cx: flEdge + flW/2, cz: frontZ, hw: flW/2, hd: WT * S });
+    // Front wall RIGHT of door
+    const frEdge = cx + hw; // right edge of building
+    const frW = frEdge - (dxWorld + dw);
+    if (frW > 0.2) colliders.push({ cx: frEdge - frW/2, cz: frontZ, hw: frW/2, hd: WT * S });
+  }
+
+  // North side buildings (side=1, rotated PI)
+  const northDefs = [
+    { w:12, d:16, x:-30, door:0 }, { w:14, d:18, x:-15, door:0 }, { w:8, d:14, x:-4, door:0 },
+    { w:14, d:16, x:9, door:0 },   { w:8, d:12, x:20, door:0 },   { w:14, d:20, x:32, door:0 },
+  ];
+  for (const b of northDefs) addBldgWalls(b, 1, b.door);
+
+  // South side buildings (side=-1, no rotation)
+  const southDefs = [
+    { w:10, d:14, x:-27, door:0 }, { w:12, d:16, x:-14, door:0 }, { w:8, d:12, x:-4, door:0 },
+    { w:10, d:14, x:7, door:0 },   { w:10, d:16, x:18, door:0 },   { w:10, d:16, x:29, door:0 },
+  ];
+  for (const b of southDefs) addBldgWalls(b, -1, b.door);
+
+  // Porch posts
   for (let px = -townLen/2+3; px <= townLen/2-3; px += 6) {
     for (const side of [1, -1]) {
       const zOff = side * (STREET_W/2 + BOARD_W/2 - 0.3);
       colliders.push({ cx: tx+px*S, cz: tz+zOff*S, hw: 0.3*S, hd: 0.3*S });
     }
   }
+  // Building interior floor zones (same height as boardwalk)
   const bwH = BOARD_H * S;
+  for (const b of northDefs) {
+    boardwalkZones.push({ cx: tx+b.x*S, cz: tz+(STREET_W/2+BOARD_W+b.d/2)*S, hw: b.w/2*S, hd: b.d/2*S, height: bwH });
+  }
+  for (const b of southDefs) {
+    boardwalkZones.push({ cx: tx+b.x*S, cz: tz-(STREET_W/2+BOARD_W+b.d/2)*S, hw: b.w/2*S, hd: b.d/2*S, height: bwH });
+  }
+  // Boardwalk zones
   boardwalkZones.push({ cx:tx, cz:tz+(STREET_W/2+BOARD_W/2)*S, hw:townLen/2*S, hd:BOARD_W/2*S, height:bwH });
   boardwalkZones.push({ cx:tx, cz:tz-(STREET_W/2+BOARD_W/2)*S, hw:townLen/2*S, hd:BOARD_W/2*S, height:bwH });
 }
