@@ -309,27 +309,32 @@ scene.add(sunSprite);
 (function buildMoonSprite() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const ctx = c.getContext('2d');
-  // Bright disc — same approach as sun: radial gradient → fillRect.
-  // AdditiveBlending means black = transparent, so corners are naturally invisible.
-  const g = ctx.createRadialGradient(128,128,0, 128,128,128);
-  g.addColorStop(0,    'rgba(255,253,240,1)');  // bright white center
-  g.addColorStop(0.60, 'rgba(238,235,215,1)');  // moon body — wide opaque disc
-  g.addColorStop(0.72, 'rgba(200,198,175,0.7)');// rim fade
-  g.addColorStop(0.85, 'rgba(80,78,65,0.2)');   // soft outer glow
-  g.addColorStop(1.0,  'rgba(0,0,0,0)');        // invisible at corners
-  ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
-  // Maria (dark seas) — multiply darkens the disc pixels
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.fillStyle = '#909080';
+  // Clip to a circle so corners are always 100% transparent — no box possible
+  ctx.save();
+  ctx.beginPath(); ctx.arc(128,128,124,0,Math.PI*2); ctx.clip();
+  // Base disc: opaque cream-white, slight limb darkening toward rim
+  const base = ctx.createRadialGradient(128,128,0, 128,128,124);
+  base.addColorStop(0,    'rgba(255,253,238,1)');  // bright center
+  base.addColorStop(0.65, 'rgba(242,239,218,1)');  // main body
+  base.addColorStop(0.88, 'rgba(210,206,182,1)');  // limb darkening
+  base.addColorStop(1.0,  'rgba(160,155,130,0)');  // fade to transparent at rim
+  ctx.fillStyle = base; ctx.fillRect(0,0,256,256);
+  // Maria (dark lunar seas) — drawn normally so they look like real dark patches
+  ctx.globalAlpha = 0.28; ctx.fillStyle = '#6A6858';
   for (const [x,y,r] of [[110,90,38],[150,130,28],[90,145,22],[155,80,18]]) {
     ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
   }
-  ctx.globalCompositeOperation = 'source-over';
+  // Brighter crater highlights
+  ctx.globalAlpha = 0.18; ctx.fillStyle = '#F0EDD0';
+  for (const [x,y,r] of [[85,80,12],[155,108,15],[95,145,9],[140,158,7],[115,115,18]]) {
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
   window._moonTex = new THREE.CanvasTexture(c);
 })();
 const moonSpriteMat = new THREE.SpriteMaterial({
   map: window._moonTex, transparent: true, depthWrite: false,
-  blending: THREE.AdditiveBlending,
+  // NormalBlending: disc is SOLID — blocks stars, shows real dark maria
 });
 const moonSprite = new THREE.Sprite(moonSpriteMat);
 moonSprite.scale.set(700, 700, 1);
@@ -355,7 +360,7 @@ const moonGlowMat = new THREE.SpriteMaterial({
   blending: THREE.AdditiveBlending, depthWrite: false,
 });
 const moonGlowSprite = new THREE.Sprite(moonGlowMat);
-moonGlowSprite.scale.set(1100, 1100, 1);
+moonGlowSprite.scale.set(820, 820, 1);
 moonGlowSprite.renderOrder = 1; // draw before moon disc so disc sits on top of halo
 scene.add(moonGlowSprite);
 
@@ -546,10 +551,10 @@ function applyContinuousTime(dt) {
   const sunPos = getSunWorldPos(timeOfDay);
   const moonPos = getMoonWorldPos(timeOfDay);
 
-  // Sun: fade in/out near horizon over ~15 units
+  // Sun: fade near horizon
   const sunFade = THREE.MathUtils.clamp(sunPos.y / 15, 0, 1);
-  // Moon: same
-  const moonFade = THREE.MathUtils.clamp(moonPos.y / 15, 0, 1);
+  // Moon: stay full until very close to horizon, then fade quickly
+  const moonFade = THREE.MathUtils.clamp(moonPos.y / 4, 0, 1);
 
   const { lf, lc, lo, hi } = lerpSkyState(timeOfDay);
 
