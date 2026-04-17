@@ -86,10 +86,10 @@ canvas { display: block; }
   <div id="tr-syncclk"><span id="tc-syncclk" style="color:#FFD700;width:10px;display:inline-block"> </span>Real clock [C]: <span id="tv-syncclk">OFF</span> <button data-tw="syncclk" data-d="1">toggle</button></div>
   <div id="tr-fftime"><span id="tc-fftime" style="color:#FFD700;width:10px;display:inline-block"> </span>Time (FF/RW): <span id="tv-fftime">10:00</span> <button data-tw="fftime" data-d="-1">−</button><button data-tw="fftime" data-d="1">+</button></div>
   <div style="opacity:0.6;font-size:10px;margin:3px 0 2px">— Stars —</div>
-  <div id="tr-sbright"><span id="tc-sbright" style="color:#FFD700;width:10px;display:inline-block"> </span>Brightness:  <span id="tv-sbright">1.0</span> <button data-tw="sbright" data-d="-1">−</button><button data-tw="sbright" data-d="1">+</button></div>
-  <div id="tr-ssz"   ><span id="tc-ssz"    style="color:#FFD700;width:10px;display:inline-block"> </span>Star size:   <span id="tv-ssz">1.0</span> <button data-tw="ssz"    data-d="-1">−</button><button data-tw="ssz"    data-d="1">+</button></div>
-  <div id="tr-sfsz"  ><span id="tc-sfsz"   style="color:#FFD700;width:10px;display:inline-block"> </span>Field size:  <span id="tv-sfsz">1.5</span> <button data-tw="sfsz"   data-d="-1">−</button><button data-tw="sfsz"   data-d="1">+</button></div>
-  <div id="tr-smwsz" ><span id="tc-smwsz"  style="color:#FFD700;width:10px;display:inline-block"> </span>MW size:     <span id="tv-smwsz">1.5</span> <button data-tw="smwsz"  data-d="-1">−</button><button data-tw="smwsz"  data-d="1">+</button></div>
+  <div id="tr-sbright"><span id="tc-sbright" style="color:#FFD700;width:10px;display:inline-block"> </span>Brightness:  <span id="tv-sbright">0.4</span> <button data-tw="sbright" data-d="-1">−</button><button data-tw="sbright" data-d="1">+</button></div>
+  <div id="tr-ssz"   ><span id="tc-ssz"    style="color:#FFD700;width:10px;display:inline-block"> </span>Star size:   <span id="tv-ssz">0.7</span> <button data-tw="ssz"    data-d="-1">−</button><button data-tw="ssz"    data-d="1">+</button></div>
+  <div id="tr-sfsz"  ><span id="tc-sfsz"   style="color:#FFD700;width:10px;display:inline-block"> </span>Field size:  <span id="tv-sfsz">1.3</span> <button data-tw="sfsz"   data-d="-1">−</button><button data-tw="sfsz"   data-d="1">+</button></div>
+  <div id="tr-smwsz" ><span id="tc-smwsz"  style="color:#FFD700;width:10px;display:inline-block"> </span>MW size:     <span id="tv-smwsz">1.1</span> <button data-tw="smwsz"  data-d="-1">−</button><button data-tw="smwsz"  data-d="1">+</button></div>
 </div>
 
 <script type="importmap">
@@ -116,10 +116,10 @@ let MOON_GLOW_OP   = 0.45; // glow opacity at full visibility
 let MOON_RISE      = 19.0; // hour moon fades IN  (default ~7 pm)
 let MOON_SET       = 6.0;  // hour moon fades OUT (default ~6 am)
 let MOON_FADE_ALT  = 4;    // moon altitude (y world-units) where horizon fade completes
-let STAR_BRIGHT     = 1.0; // opacity multiplier on top of keyframe value
-let STAR_NAMED_SIZE = 1.0; // size multiplier for named constellation stars (applied to 4.5/3.0/2.0 base)
-let STAR_FIELD_SIZE = 1.5; // pixel size for background field stars
-let STAR_MW_SIZE    = 1.5; // pixel size for Milky Way band stars
+let STAR_BRIGHT     = 0.4; // opacity multiplier on top of keyframe value
+let STAR_NAMED_SIZE = 0.7; // size multiplier for named constellation stars (applied to 4.5/3.0/2.0 base)
+let STAR_FIELD_SIZE = 1.3; // pixel size for background field stars
+let STAR_MW_SIZE    = 1.1; // pixel size for Milky Way band stars
 
 // Returns the shortest signed delta from a to b on a wrap of size W.
 // Result is in [-W/2, W/2].
