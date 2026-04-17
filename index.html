@@ -66,7 +66,7 @@ canvas { display: block; }
 <div id="compass-wrap"><canvas id="compass-canvas" width="100" height="100"></canvas></div>
 <div id="minimap"><canvas id="minimap-canvas" width="320" height="320"></canvas></div>
 <div id="tweaks" style="position:fixed;top:10px;left:10px;background:rgba(0,0,0,0.55);color:#eee;font:12px monospace;padding:10px 12px;border-radius:6px;z-index:10;line-height:1.6;pointer-events:auto;min-width:210px">
-  <div style="font-weight:bold;margin-bottom:2px">Tweaks &nbsp;<span style="font-weight:normal;opacity:0.6;font-size:10px">Tab=select &nbsp; - / = adjust &nbsp; H=hide</span></div>
+  <div style="font-weight:bold;margin-bottom:2px">Tweaks &nbsp;<span style="font-weight:normal;opacity:0.6;font-size:10px">Tab=select &nbsp; - / = adjust &nbsp; H=hide/show</span></div>
   <div style="opacity:0.6;font-size:10px;margin-bottom:2px">— Movement —</div>
   <div id="tr-turn"  ><span id="tc-turn"  style="color:#FFD700;width:10px;display:inline-block"> </span>Turn speed: <span id="tv-turn">1.80</span> <button data-tw="turn"  data-d="-1">−</button><button data-tw="turn"  data-d="1">+</button></div>
   <div id="tr-mouse" ><span id="tc-mouse" style="color:#FFD700;width:10px;display:inline-block"> </span>Mouse sens: <span id="tv-mouse">0.0020</span> <button data-tw="mouse" data-d="-1">−</button><button data-tw="mouse" data-d="1">+</button></div>
@@ -84,6 +84,7 @@ canvas { display: block; }
   <div id="tr-mfade" ><span id="tc-mfade" style="color:#FFD700;width:10px;display:inline-block"> </span>Horiz fade: <span id="tv-mfade">4</span> <button data-tw="mfade" data-d="-1">−</button><button data-tw="mfade" data-d="1">+</button></div>
   <div style="opacity:0.6;font-size:10px;margin:3px 0 2px">— Time —</div>
   <div id="tr-syncclk"><span id="tc-syncclk" style="color:#FFD700;width:10px;display:inline-block"> </span>Real clock [C]: <span id="tv-syncclk">OFF</span> <button data-tw="syncclk" data-d="1">toggle</button></div>
+  <div id="tr-fftime"><span id="tc-fftime" style="color:#FFD700;width:10px;display:inline-block"> </span>Time (FF/RW): <span id="tv-fftime">10:00</span> <button data-tw="fftime" data-d="-1">−</button><button data-tw="fftime" data-d="1">+</button></div>
   <div style="opacity:0.6;font-size:10px;margin:3px 0 2px">— Stars —</div>
   <div id="tr-sbright"><span id="tc-sbright" style="color:#FFD700;width:10px;display:inline-block"> </span>Brightness:  <span id="tv-sbright">1.0</span> <button data-tw="sbright" data-d="-1">−</button><button data-tw="sbright" data-d="1">+</button></div>
   <div id="tr-ssz"   ><span id="tc-ssz"    style="color:#FFD700;width:10px;display:inline-block"> </span>Star size:   <span id="tv-ssz">1.0</span> <button data-tw="ssz"    data-d="-1">−</button><button data-tw="ssz"    data-d="1">+</button></div>
@@ -136,6 +137,9 @@ function wrapDelta(a, b, W = WORLD_SIZE) {
 let timeOfDay = 10.0; // start mid-morning
 const TIME_SPEED = 1 / 60; // 1 game-hour per real minute → full day in 24 min
 let SYNC_CLOCK = false;    // when true, timeOfDay tracks the real wall clock
+const SKY_DIST = 5400;     // distance of sun/moon billboards from camera
+let _lastSunDir  = new THREE.Vector3(0, 1, 0);
+let _lastMoonDir = new THREE.Vector3(0, -1, 0);
 
 // Sky keyframes — each row is one moment in the day.
 // Colors stored as hex ints; floats are scalars.
@@ -519,6 +523,19 @@ const mwP = [];
   }
 }
 
+// Circular alpha texture — makes PointsMaterial render round dots instead of squares.
+// A radial gradient (white centre → transparent edge) gives a soft star look.
+const _starPtCanvas = document.createElement('canvas');
+_starPtCanvas.width = _starPtCanvas.height = 64;
+const _starPtCtx = _starPtCanvas.getContext('2d');
+const _starPtGrad = _starPtCtx.createRadialGradient(32,32,0, 32,32,32);
+_starPtGrad.addColorStop(0,    'rgba(255,255,255,1)');
+_starPtGrad.addColorStop(0.40, 'rgba(255,255,255,0.9)');
+_starPtGrad.addColorStop(0.70, 'rgba(255,255,255,0.4)');
+_starPtGrad.addColorStop(1.0,  'rgba(255,255,255,0)');
+_starPtCtx.fillStyle = _starPtGrad; _starPtCtx.fillRect(0,0,64,64);
+const _starPtTex = new THREE.CanvasTexture(_starPtCanvas);
+
 // Helper: build a THREE.Points from flat arrays
 function mkStarPts(posArr, size, baseColor, colorArr) {
   const geo = new THREE.BufferGeometry();
@@ -529,6 +546,7 @@ function mkStarPts(posArr, size, baseColor, colorArr) {
     color: useVC ? 0xffffff : baseColor,
     vertexColors: useVC,
     size, transparent: true, opacity: 0, sizeAttenuation: false,
+    map: _starPtTex, alphaTest: 0.02,
   });
   return [new THREE.Points(geo, mat), mat];
 }
@@ -572,7 +590,8 @@ const sunSpriteMat = new THREE.MeshBasicMaterial({
 const sunSprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sunSpriteMat);
 sunSprite.scale.set(500, 500, 1);
 sunSprite.frustumCulled = false;
-scene.add(sunSprite);
+camera.add(sunSprite);   // camera child → position in camera space → never frustum-clipped
+scene.add(camera);       // required for camera children to participate in the scene graph
 
 // ============================================================
 // MOON SPRITE — full moon disc with craters
@@ -634,7 +653,7 @@ new THREE.TextureLoader().load(
 const moonSprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), moonSpriteMat);
 moonSprite.scale.set(700, 700, 1);
 moonSprite.frustumCulled = false;
-scene.add(moonSprite);
+camera.add(moonSprite);  // camera child — no frustum clipping
 
 // Glow halo — billboard mesh, same pattern
 (function buildMoonGlow() {
@@ -657,7 +676,7 @@ const moonGlowSprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), moonGlowMat
 moonGlowSprite.scale.set(820, 820, 1);
 moonGlowSprite.renderOrder = 1;
 moonGlowSprite.frustumCulled = false;
-scene.add(moonGlowSprite);
+camera.add(moonGlowSprite); // camera child — no frustum clipping
 
 // ============================================================
 // GROUND — single huge plane that follows the player.
@@ -784,7 +803,7 @@ let skyView = false; // V key: overhead fisheye look at the full sky dome
 // ============================================================
 // TWEAKS — Tab cycles selection, - / = adjusts, buttons also work
 // ============================================================
-const TWEAK_LIST = ['turn','mouse','walk','run','night','moon','msize','mgsize','mgop','mrise','mset','mfade','syncclk','sbright','ssz','sfsz','smwsz'];
+const TWEAK_LIST = ['turn','mouse','walk','run','night','moon','msize','mgsize','mgop','mrise','mset','mfade','syncclk','fftime','sbright','ssz','sfsz','smwsz'];
 let selectedTweakIdx = 5; // start on Moon Brightness
 
 function refreshTweaks() {
@@ -801,6 +820,8 @@ function refreshTweaks() {
   document.getElementById('tv-mset').textContent   = MOON_SET.toFixed(1);
   document.getElementById('tv-mfade').textContent   = MOON_FADE_ALT.toFixed(0);
   document.getElementById('tv-syncclk').textContent = SYNC_CLOCK ? 'ON' : 'OFF';
+  { const _fh=Math.floor(timeOfDay%24), _fm=Math.floor((timeOfDay%1)*60);
+    document.getElementById('tv-fftime').textContent = `${_fh}:${String(_fm).padStart(2,'0')}`; }
   document.getElementById('tv-sbright').textContent = STAR_BRIGHT.toFixed(1);
   document.getElementById('tv-ssz').textContent     = STAR_NAMED_SIZE.toFixed(1);
   document.getElementById('tv-sfsz').textContent    = STAR_FIELD_SIZE.toFixed(1);
@@ -825,6 +846,7 @@ function adjustTweak(kind, dir) {
   if (kind === 'mset')   MOON_SET       = ((MOON_SET       + dir * 0.5 + 24) % 24);
   if (kind === 'mfade')  MOON_FADE_ALT   = Math.max(1,   MOON_FADE_ALT   + dir * 1);
   if (kind === 'syncclk') SYNC_CLOCK = !SYNC_CLOCK;
+  if (kind === 'fftime')  timeOfDay = ((timeOfDay + dir * 0.5) % 24 + 24) % 24;
   if (kind === 'sbright') STAR_BRIGHT    = Math.max(0,   STAR_BRIGHT     + dir * 0.1);
   if (kind === 'ssz')     STAR_NAMED_SIZE= Math.max(0.1, STAR_NAMED_SIZE + dir * 0.1);
   if (kind === 'sfsz')    STAR_FIELD_SIZE= Math.max(0.3, STAR_FIELD_SIZE + dir * 0.2);
@@ -844,9 +866,13 @@ document.addEventListener('keydown', e => {
     refreshTweaks();
     return;
   }
-  // = key (no shift needed) increases, - key decreases the selected param
-  if (e.code === 'Equal')  { adjustTweak(TWEAK_LIST[selectedTweakIdx],  1); }
-  if (e.code === 'Minus')  { adjustTweak(TWEAK_LIST[selectedTweakIdx], -1); }
+  // = / - adjust the selected tweak ONLY when the panel is visible.
+  // When panel is hidden, these keys FF/RW time (handled in animate loop instead).
+  if (e.code === 'Equal' || e.code === 'Minus') {
+    if (document.getElementById('tweaks').style.display !== 'none') {
+      adjustTweak(TWEAK_LIST[selectedTweakIdx], e.code === 'Equal' ? 1 : -1);
+    }
+  }
   // H: hide/show tweaks panel
   if (e.code === 'KeyH') {
     const tw = document.getElementById('tweaks');
@@ -898,6 +924,8 @@ function applyContinuousTime(dt) {
 
   // Sun: fade near horizon
   const sunFade = THREE.MathUtils.clamp(sunPos.y / 15, 0, 1);
+  const sunDir = sunPos.clone().normalize();
+  _lastSunDir.copy(sunDir); // saved for camera-space positioning in animate loop
 
   // Moon visibility — two-part:
   // 1) Time-of-day window: fades in over 1 h after MOON_RISE, out 1 h before MOON_SET.
@@ -922,7 +950,7 @@ function applyContinuousTime(dt) {
   const { lf, lc, lo, hi } = lerpSkyState(timeOfDay);
 
   // Sky uniforms
-  const sunDir = sunPos.clone().normalize();
+  // (sunDir already set above, saved into _lastSunDir for animate loop camera-space placement)
   // When sun is below horizon we still want the horizon glow to track
   // where the sun just disappeared, so pass clamped-y direction.
   const horizDir = new THREE.Vector3(sunPos.x, Math.max(sunPos.y, -50), sunPos.z).normalize();
@@ -975,13 +1003,7 @@ function applyContinuousTime(dt) {
   const _starAngle = ((timeOfDay % 24) / 24) * Math.PI * 2;
   starGroup.setRotationFromAxisAngle(POLARIS_DIR, _starAngle);
 
-  // Sun sprite — beyond outer mountain ring (5200) so mountains always occlude it
-  const SKY_DIST = 5400;
-  sunSprite.position.set(
-    player.x + sunDir.x * SKY_DIST,
-    sunDir.y * SKY_DIST,
-    player.z + sunDir.z * SKY_DIST
-  );
+  // Sun sprite — position now set in animate loop (camera-space child)
   // Color tint: warm orange at sunrise/set, white at noon
   const sunElevation = THREE.MathUtils.clamp(sunDir.y, 0, 1);
   sunSpriteMat.color.setHSL(0.08 - sunElevation * 0.08, 1 - sunElevation * 0.8, 1);
@@ -990,19 +1012,9 @@ function applyContinuousTime(dt) {
   const sunScale = 500 + (1 - sunElevation) * 300;
   sunSprite.scale.set(sunScale, sunScale, 1);
 
-  // Moon sprite — always full moon, opposite side of sky
+  // Moon sprite — position now set in animate loop (camera-space child)
   const moonDir = moonPos.clone().normalize();
-  moonSprite.position.set(
-    player.x + moonDir.x * SKY_DIST,
-    moonDir.y * SKY_DIST,
-    player.z + moonDir.z * SKY_DIST
-  );
-  // Glow sits 10 units closer than the disc — avoids z-fighting while keeping depth correct
-  moonGlowSprite.position.set(
-    player.x + moonDir.x * (SKY_DIST - 10),
-    moonDir.y * (SKY_DIST - 10),
-    player.z + moonDir.z * (SKY_DIST - 10)
-  );
+  _lastMoonDir.copy(moonDir); // saved for camera-space positioning in animate loop
 
   // moonVis = time-of-day window × horizon fade (fully slider-driven, replaces KMOON keyframe)
   const moonVis = moonTimeVis * moonFade;
@@ -1109,18 +1121,33 @@ let _wrapSkip = 0; // frames to skip render after a world-wrap (hides one-frame 
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.1);
-  // Advance time of day — hold + to fast-forward, hold - to rewind, else normal pace.
-  // When SYNC_CLOCK is on, read the wall clock instead of advancing the counter.
-  // Fast-forward/rewind keys temporarily override sync so you can still scrub time.
-  if (keys['Equal'] || keys['NumpadAdd']) {
+  // Advance time of day.
+  // When tweaks panel is HIDDEN: hold +/= to fast-forward, hold - to rewind.
+  // When tweaks panel is VISIBLE: +/- adjust the selected tweak (keydown handler); time runs normally.
+  // When SYNC_CLOCK is on and no FF/RW keys held: lock to wall clock.
+  const _tweaksVisible = document.getElementById('tweaks').style.display !== 'none';
+  const _holdFF = keys['Equal'] || keys['NumpadAdd'];
+  const _holdRW = keys['Minus'] || keys['NumpadSubtract'];
+  if (_holdFF && !_tweaksVisible) {
     timeOfDay = (timeOfDay + dt * TIME_SPEED * 60) % 24;
-  } else if (keys['Minus'] || keys['NumpadSubtract']) {
+  } else if (_holdRW && !_tweaksVisible) {
     timeOfDay = (timeOfDay - dt * TIME_SPEED * 60 + 24) % 24;
-  } else if (SYNC_CLOCK) {
-    const _n = new Date();
-    timeOfDay = _n.getHours() + _n.getMinutes() / 60 + _n.getSeconds() / 3600;
-  } else {
-    timeOfDay = (timeOfDay + dt * TIME_SPEED) % 24;
+  } else if (!_holdFF && !_holdRW) {
+    if (SYNC_CLOCK) {
+      const _n = new Date();
+      timeOfDay = _n.getHours() + _n.getMinutes() / 60 + _n.getSeconds() / 3600;
+    } else {
+      timeOfDay = (timeOfDay + dt * TIME_SPEED) % 24;
+    }
+  }
+  else {
+    // FF/RW key held but tweaks are visible → key adjusts tweaks; time still runs normally
+    if (SYNC_CLOCK) {
+      const _n = new Date();
+      timeOfDay = _n.getHours() + _n.getMinutes() / 60 + _n.getSeconds() / 3600;
+    } else {
+      timeOfDay = (timeOfDay + dt * TIME_SPEED) % 24;
+    }
   }
   applyContinuousTime(dt);
 
@@ -1158,11 +1185,25 @@ function animate() {
   euler.y = -lookYaw;
   euler.x = skyView ? Math.PI / 2 : lookPitch; // sky view forces straight up
   camera.quaternion.setFromEuler(euler);
-  // Billboard planes: copy camera orientation so sun/moon/glow always face the lens.
-  // Done here — after setFromEuler — so we use the current frame's quaternion, not last frame's.
-  sunSprite.quaternion.copy(camera.quaternion);
-  moonSprite.quaternion.copy(camera.quaternion);
-  moonGlowSprite.quaternion.copy(camera.quaternion);
+  // Sun/moon billboards are camera children — position them in camera space so they're
+  // always within the frustum. Rotate world direction to camera space via inverse quaternion.
+  {
+    const _invQ = camera.quaternion.clone().invert();
+    // Sun in camera space
+    const _sc = _lastSunDir.clone().applyQuaternion(_invQ);
+    const _sunBehind = _sc.z >= 0.0; // z > 0 = behind camera in Three.js camera space
+    sunSprite.visible = !_sunBehind;
+    if (!_sunBehind) sunSprite.position.set(_sc.x*SKY_DIST, _sc.y*SKY_DIST, _sc.z*SKY_DIST);
+    // Moon in camera space
+    const _mc = _lastMoonDir.clone().applyQuaternion(_invQ);
+    const _moonBehind = _mc.z >= 0.0;
+    moonSprite.visible = !_moonBehind;
+    moonGlowSprite.visible = !_moonBehind;
+    if (!_moonBehind) {
+      moonSprite.position.set(_mc.x*SKY_DIST, _mc.y*SKY_DIST, _mc.z*SKY_DIST);
+      moonGlowSprite.position.set(_mc.x*(SKY_DIST-10), _mc.y*(SKY_DIST-10), _mc.z*(SKY_DIST-10));
+    }
+  }
 
   // Sky, stars, mountains all ride along with the camera.
   skyDome.position.set(player.x, 0, player.z);
@@ -1178,7 +1219,7 @@ function animate() {
   nadirLight.position.set(player.x, 500, player.z);
   nadirLight.target.position.set(player.x, 0, player.z);
   nadirLight.target.updateMatrixWorld();
-  // Sun + moon sprites are positioned inside applyContinuousTime.
+  // Sun + moon sprites are positioned above in camera space (camera children).
 
   // Ground: follow player in world space, offset UVs so the texture
   // appears nailed to the world.
