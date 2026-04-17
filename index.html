@@ -57,7 +57,7 @@ canvas { display: block; }
 <div id="overlay" onclick="startGame()">
   <div>
     West Texas <small style="font-size:14px;opacity:0.6">environment</small>
-    <span>Click to enter<br>W/S — forward/back &nbsp; A/D — turn<br>Mouse — look around &nbsp; Shift — run &nbsp; hold +/- — fast-forward/rewind time</span>
+    <span>Click to enter<br>W/S — forward/back &nbsp; A/D — turn<br>Mouse — look around &nbsp; Shift — run &nbsp; hold +/- — fast-forward/rewind time<br>L — constellation lines &nbsp; H — tweaks panel</span>
   </div>
 </div>
 <div id="crosshair"></div>
@@ -411,11 +411,13 @@ const NAMED_STARS = [
   [13.40,54.93, 3.5, 1.0, 0.95, 0.8],  // Mizar (A, double star)
   [13.79,49.31, 3.5, 0.7, 0.8,  1.0],  // Alkaid (B, handle end)
   // === LITTLE DIPPER / Ursa Minor ===
-  [2.53, 89.26, 4.5, 1.0, 1.0,  0.9],  // Polaris (F, north star — slightly larger)
-  [14.85,74.16, 3.0, 1.0, 0.8,  0.5],  // Kochab (K, outer bowl)
-  [15.35,71.83, 2.5, 1.0, 0.9,  0.7],  // Pherkad
-  [16.29,75.75, 2.0, 1.0, 0.9,  0.8],  // Epsilon UMi
-  [15.73,77.79, 2.0, 1.0, 0.9,  0.8],  // Zeta UMi
+  [2.53, 89.26, 4.5, 1.0, 1.0,  0.9],  // Polaris (α, north star — slightly larger)
+  [14.85,74.16, 3.0, 1.0, 0.8,  0.5],  // Kochab (β, outer bowl)
+  [15.35,71.83, 2.5, 1.0, 0.9,  0.7],  // Pherkad (γ)
+  [17.53,86.58, 2.0, 1.0, 0.95, 0.85], // Yildun (δ, mid-handle)
+  [16.77,82.04, 2.0, 0.9, 0.9,  0.85], // Epsilon UMi (ε, handle-bowl junction)
+  [15.73,77.79, 2.0, 1.0, 0.9,  0.8],  // Zeta UMi (ζ, bowl)
+  [16.29,75.75, 2.0, 1.0, 0.9,  0.8],  // Eta UMi (η, bowl)
   // === CASSIOPEIA (W shape, circumpolar) ===
   [0.15, 59.15, 3.0, 1.0, 0.9,  0.8],  // Caph (F)
   [0.67, 56.54, 3.5, 1.0, 0.8,  0.5],  // Schedar (K)
@@ -628,6 +630,161 @@ const [mwPts,    mwMat]     = mkStarPts(mwP, 1.5, 0xdde8ff, null);
 allStarMats.push(brightMat, medMat, dimMat, bgMat, mwMat);
 starGroup.add(brightPts, medPts, dimPts, bgPts, mwPts);
 scene.add(starGroup);
+
+// ============================================================
+// CONSTELLATION LINES + LABELS — toggled with 'L' key
+// Lines connect stars within each constellation; labels float near center.
+// ============================================================
+let constellationsVisible = false;
+
+// Each constellation: { name, lines: [[ra1,dec1, ra2,dec2], ...], label: [ra,dec] }
+const CONSTELLATIONS = [
+  { name: 'Orion', label: [5.55, -1],
+    lines: [
+      [5.92,7.41, 5.42,6.35],   // Betelgeuse-Bellatrix
+      [5.24,-8.20, 5.79,-9.67], // Rigel-Saiph
+      [5.92,7.41, 5.53,-0.30],  // Betelgeuse-Mintaka
+      [5.42,6.35, 5.53,-0.30],  // Bellatrix-Mintaka
+      [5.53,-0.30, 5.60,-1.20], // Mintaka-Alnilam
+      [5.60,-1.20, 5.68,-1.94], // Alnilam-Alnitak
+      [5.68,-1.94, 5.79,-9.67], // Alnitak-Saiph
+      [5.24,-8.20, 5.68,-1.94], // Rigel-Alnitak
+    ]},
+  { name: 'Big Dipper', label: [12.0, 57],
+    lines: [
+      [11.06,61.75, 11.03,56.38], // Dubhe-Merak
+      [11.03,56.38, 11.90,53.69], // Merak-Phecda
+      [11.90,53.69, 12.26,57.03], // Phecda-Megrez
+      [12.26,57.03, 11.06,61.75], // Megrez-Dubhe (close bowl)
+      [12.26,57.03, 12.90,55.96], // Megrez-Alioth
+      [12.90,55.96, 13.40,54.93], // Alioth-Mizar
+      [13.40,54.93, 13.79,49.31], // Mizar-Alkaid
+    ]},
+  { name: 'Little Dipper', label: [15.5, 80],
+    lines: [
+      [2.53,89.26, 17.53,86.58],  // Polaris-Yildun
+      [17.53,86.58, 16.77,82.04], // Yildun-Epsilon
+      [16.77,82.04, 15.73,77.79], // Epsilon-Zeta
+      [15.73,77.79, 16.29,75.75], // Zeta-Eta
+      [16.29,75.75, 14.85,74.16], // Eta-Kochab
+      [14.85,74.16, 15.35,71.83], // Kochab-Pherkad
+      [15.35,71.83, 15.73,77.79], // Pherkad-Zeta (close bowl)
+    ]},
+  { name: 'Cassiopeia', label: [1.0, 62],
+    lines: [
+      [0.15,59.15, 0.67,56.54],  // Caph-Schedar
+      [0.67,56.54, 0.95,60.72],  // Schedar-Gamma
+      [0.95,60.72, 1.43,60.24],  // Gamma-Ruchbah
+      [1.43,60.24, 1.91,63.67],  // Ruchbah-Segin
+    ]},
+  { name: 'Cygnus', label: [20.3, 38],
+    lines: [
+      [20.69,45.28, 20.37,40.26], // Deneb-Sadr
+      [20.37,40.26, 19.51,27.96], // Sadr-Albireo
+      [20.37,40.26, 20.77,33.97], // Sadr-Gienah
+      [20.37,40.26, 21.22,30.23], // Sadr-Zeta Cyg
+    ]},
+  { name: 'Scorpius', label: [16.8, -32],
+    lines: [
+      [16.49,-26.43, 16.09,-19.81], // Antares-Graffias
+      [16.09,-19.81, 16.00,-22.62], // Graffias-Dschubba
+      [16.00,-22.62, 16.36,-25.59], // Dschubba-Alniyat
+      [16.36,-25.59, 16.49,-26.43], // Alniyat-Antares
+      [16.49,-26.43, 16.86,-38.05], // Antares-Mu Sco
+      [16.86,-38.05, 17.62,-42.99], // Mu-Sargas
+      [17.62,-42.99, 17.56,-37.10], // Sargas-Shaula
+    ]},
+  { name: 'Leo', label: [10.5, 18],
+    lines: [
+      [10.14,11.97, 11.82,14.57], // Regulus-Denebola
+      [10.14,11.97, 10.33,19.84], // Regulus-Algieba
+      [10.33,19.84, 11.24,20.52], // Algieba-Zosma
+      [11.24,20.52, 11.82,14.57], // Zosma-Denebola
+    ]},
+  { name: 'Sagittarius', label: [18.6, -28],
+    lines: [
+      [18.40,-34.38, 18.35,-29.83], // Kaus Australis-Kaus Media
+      [18.35,-29.83, 18.48,-25.42], // Kaus Media-Kaus Borealis
+      [18.35,-29.83, 18.92,-26.30], // Kaus Media-Nunki
+      [18.92,-26.30, 19.04,-29.88], // Nunki-Ascella
+      [19.04,-29.88, 18.40,-34.38], // Ascella-Kaus Australis
+    ]},
+  { name: 'Pegasus', label: [22.8, 28],
+    lines: [
+      [21.74, 9.87, 23.06,28.08], // Enif-Scheat
+      [23.06,28.08, 23.08,15.21], // Scheat-Markab
+      [23.08,15.21, 0.22,15.18],  // Markab-Algenib
+      [0.22, 15.18, 23.06,28.08], // Algenib-Scheat (close square via Alpheratz)
+    ]},
+  { name: 'Summer △', label: [19.5, 32],
+    lines: [
+      [18.62,38.78, 19.85,8.87],  // Vega-Altair
+      [19.85,8.87,  20.69,45.28], // Altair-Deneb
+      [20.69,45.28, 18.62,38.78], // Deneb-Vega
+    ]},
+  { name: 'Gemini', label: [7.2, 28],
+    lines: [
+      [7.58, 31.89, 7.76,28.03],  // Pollux-Castor
+      [7.58, 31.89, 6.63,16.40],  // Pollux-Alhena
+      [7.76, 28.03, 6.38,22.51],  // Castor-Propus
+    ]},
+  { name: 'Virgo', label: [13.5, -5],
+    lines: [
+      [14.26,19.18, 13.42,-11.16], // Arcturus-Spica
+    ]},
+  { name: 'Pleiades', label: [3.78, 25],
+    lines: [
+      [3.75,24.10, 3.82,24.05],  // Alcyone-Atlas
+      [3.75,24.10, 3.70,23.95],  // Alcyone-Electra
+      [3.75,24.10, 3.76,24.37],  // Alcyone-Maia
+      [3.75,24.10, 3.77,23.86],  // Alcyone-Merope
+    ]},
+];
+
+// Build line geometry
+const _clPos = [];
+for (const c of CONSTELLATIONS) {
+  for (const [r1,d1,r2,d2] of c.lines) {
+    const a = rd(r1,d1), b = rd(r2,d2);
+    _clPos.push(a.x,a.y,a.z, b.x,b.y,b.z);
+  }
+}
+const _clGeo = new THREE.BufferGeometry();
+_clGeo.setAttribute('position', new THREE.Float32BufferAttribute(_clPos, 3));
+const _clMat = new THREE.LineBasicMaterial({ color: 0x4488CC, transparent: true, opacity: 0.4, depthTest: false });
+const constellationLines = new THREE.LineSegments(_clGeo, _clMat);
+constellationLines.visible = false;
+starGroup.add(constellationLines);
+
+// Build label overlay container
+const _labelDiv = document.createElement('div');
+_labelDiv.id = 'constellation-labels';
+_labelDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;display:none';
+document.body.appendChild(_labelDiv);
+const _labelEls = [];
+for (const c of CONSTELLATIONS) {
+  const el = document.createElement('div');
+  el.textContent = c.name;
+  el.style.cssText = 'position:absolute;color:rgba(100,180,255,0.7);font:11px Georgia,serif;white-space:nowrap;text-shadow:0 0 4px rgba(0,0,0,0.8);transform:translate(-50%,-50%)';
+  el._rd = rd(c.label[0], c.label[1]); // 3D position (pre-rotation)
+  _labelDiv.appendChild(el);
+  _labelEls.push(el);
+}
+
+function updateConstellationLabels() {
+  if (!constellationsVisible) return;
+  const _v = new THREE.Vector3();
+  for (const el of _labelEls) {
+    _v.copy(el._rd);
+    // Apply starGroup's rotation (sidereal) + position (follows player)
+    starGroup.localToWorld(_v);
+    _v.project(camera);
+    if (_v.z > 1 || _v.z < -1) { el.style.display = 'none'; continue; }
+    el.style.display = '';
+    el.style.left = ((_v.x + 1) / 2 * innerWidth) + 'px';
+    el.style.top  = ((-_v.y + 1) / 2 * innerHeight) + 'px';
+  }
+}
 
 // ============================================================
 // SUN + MOON — rendered entirely in the sky dome shader (no billboard sprites).
@@ -883,6 +1040,12 @@ document.addEventListener('keydown', e => {
   }
   // C: toggle real-clock sync
   if (e.code === 'KeyC') { SYNC_CLOCK = !SYNC_CLOCK; refreshTweaks(); }
+  // L: toggle constellation lines + labels
+  if (e.code === 'KeyL') {
+    constellationsVisible = !constellationsVisible;
+    constellationLines.visible = constellationsVisible;
+    document.getElementById('constellation-labels').style.display = constellationsVisible ? '' : 'none';
+  }
   // V: toggle overhead sky view — 140° FOV looking straight up
   if (e.code === 'KeyV') {
     skyView = !skyView;
@@ -1233,6 +1396,7 @@ function animate() {
   drawMinimap();
   // Skip 2 frames after a wrap to hide the one-frame shadow/object pop at the boundary
   if (_wrapSkip > 0) { _wrapSkip--; return; }
+  updateConstellationLabels();
   renderer.render(scene, camera);
 }
 animate();
