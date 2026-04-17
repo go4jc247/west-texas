@@ -818,6 +818,54 @@ function addWrapObject(x, z, mesh, visibleDist = 3000) {
 // World coords = normalized * WORLD_SIZE + tileOrigin.
 // Here we center the tile on origin, so tileOrigin = (-HALF, -HALF).
 // ============================================================
+// ============================================================
+// PLAYER STATE + COLLISION — declared here because town init needs them
+// ============================================================
+const player = { x: 0, z: 100, yaw: 0, y: 0 };
+let lookYaw = 0, lookPitch = 0;
+const keys = {};
+let locked = false;
+let skyView = false;
+let cameraMode = 'fps';
+let playerManMesh = null;
+const colliders = [];
+let townOriginX = 0, townOriginZ = 0;
+const boardwalkZones = [];
+
+function initTownColliders(tx, tz) {
+  townOriginX = tx; townOriginZ = tz;
+  const S = 1.5, STREET_W = 20, BOARD_W = 4, BOARD_H = 1.0, townLen = 80;
+  for (const b of [
+    { w:12, d:16, x:-30 }, { w:14, d:18, x:-15 }, { w:8, d:14, x:-4 },
+    { w:14, d:16, x:9 },   { w:8, d:12, x:20 },   { w:14, d:20, x:32 },
+  ]) colliders.push({ cx: tx+b.x*S, cz: tz+(STREET_W/2+BOARD_W+b.d/2)*S, hw: b.w/2*S, hd: b.d/2*S });
+  for (const b of [
+    { w:10, d:14, x:-27 }, { w:12, d:16, x:-14 }, { w:8, d:12, x:-4 },
+    { w:10, d:14, x:7 },   { w:10, d:16, x:18 },   { w:10, d:16, x:29 },
+  ]) colliders.push({ cx: tx+b.x*S, cz: tz-(STREET_W/2+BOARD_W+b.d/2)*S, hw: b.w/2*S, hd: b.d/2*S });
+  for (let px = -townLen/2+3; px <= townLen/2-3; px += 6) {
+    for (const side of [1, -1]) {
+      const zOff = side * (STREET_W/2 + BOARD_W/2 - 0.3);
+      colliders.push({ cx: tx+px*S, cz: tz+zOff*S, hw: 0.3*S, hd: 0.3*S });
+    }
+  }
+  const bwH = BOARD_H * S;
+  boardwalkZones.push({ cx:tx, cz:tz+(STREET_W/2+BOARD_W/2)*S, hw:townLen/2*S, hd:BOARD_W/2*S, height:bwH });
+  boardwalkZones.push({ cx:tx, cz:tz-(STREET_W/2+BOARD_W/2)*S, hw:townLen/2*S, hd:BOARD_W/2*S, height:bwH });
+}
+function checkCollision(nx, nz, r) {
+  for (const c of colliders) {
+    if (Math.abs(wrapDelta(c.cx,nx)) < c.hw+r && Math.abs(wrapDelta(c.cz,nz)) < c.hd+r) return true;
+  }
+  return false;
+}
+function getGroundHeight(px, pz) {
+  for (const b of boardwalkZones) {
+    if (Math.abs(wrapDelta(b.cx,px)) < b.hw && Math.abs(wrapDelta(b.cz,pz)) < b.hd) return b.height;
+  }
+  return 0;
+}
+
 const buildingPositions = [
   { id: 1, nx: 0.00, nz: 0.00, color: 0xCC3322 },
   { id: 2, nx: 0.50, nz: 0.00, color: 0x2266CC },
@@ -1166,92 +1214,7 @@ for (const b of buildingPositions) {
   buildingDots.push({ x, z, id: b.id, color: b.color });
 }
 
-// ============================================================
-// PLAYER STATE — plain 2D: x, z, yaw. That's it.
-// ============================================================
-const player = { x: 0, z: 100, yaw: 0, y: 0 }; // start just south of crossroads
-let lookYaw = 0, lookPitch = 0;
-const keys = {};
-let locked = false;
-let skyView = false;
-let cameraMode = 'fps'; // 'fps', 'shoulder', 'birdseye' — cycle with 1/2/3 keys
-let playerManMesh = null; // reference to the character mesh
-
-// Collision system — AABBs in world space, computed from town layout
-const colliders = []; // [{cx, cz, hw, hd, h}] — center, half-width, half-depth, height
-let townOriginX = 0, townOriginZ = 0;
-
-// Boardwalk zones — [{cx, cz, hw, hd, height}] in world space
-const boardwalkZones = [];
-
-function initTownColliders(tx, tz) {
-  townOriginX = tx; townOriginZ = tz;
-  const S = 1.5; // town scale
-  const STREET_W = 20, BOARD_W = 4, BOARD_H = 1.0;
-
-  // North side buildings
-  const northDefs = [
-    { w:12, d:16, x:-30 }, { w:14, d:18, x:-15 }, { w:8, d:14, x:-4 },
-    { w:14, d:16, x:9 },   { w:8, d:12, x:20 },   { w:14, d:20, x:32 },
-  ];
-  for (const b of northDefs) {
-    colliders.push({
-      cx: tx + b.x * S, cz: tz + (STREET_W/2 + BOARD_W + b.d/2) * S,
-      hw: b.w/2 * S, hd: b.d/2 * S, h: 20
-    });
-  }
-  // South side buildings
-  const southDefs = [
-    { w:10, d:14, x:-27 }, { w:12, d:16, x:-14 }, { w:8, d:12, x:-4 },
-    { w:10, d:14, x:7 },   { w:10, d:16, x:18 },   { w:10, d:16, x:29 },
-  ];
-  for (const b of southDefs) {
-    colliders.push({
-      cx: tx + b.x * S, cz: tz - (STREET_W/2 + BOARD_W + b.d/2) * S,
-      hw: b.w/2 * S, hd: b.d/2 * S, h: 20
-    });
-  }
-  // Porch posts (both sides)
-  const townLen = 80;
-  for (let px = -townLen/2 + 3; px <= townLen/2 - 3; px += 6) {
-    for (const side of [1, -1]) {
-      const zOff = side * (STREET_W/2 + BOARD_W/2 - 0.3);
-      colliders.push({
-        cx: tx + px * S, cz: tz + zOff * S,
-        hw: 0.3 * S, hd: 0.3 * S, h: 10
-      });
-    }
-  }
-  // Boardwalk zones (both sides)
-  const bwH = BOARD_H * S; // boardwalk height in world units
-  boardwalkZones.push({
-    cx: tx, cz: tz + (STREET_W/2 + BOARD_W/2) * S,
-    hw: townLen/2 * S, hd: BOARD_W/2 * S, height: bwH
-  });
-  boardwalkZones.push({
-    cx: tx, cz: tz - (STREET_W/2 + BOARD_W/2) * S,
-    hw: townLen/2 * S, hd: BOARD_W/2 * S, height: bwH
-  });
-}
-
-function checkCollision(nx, nz, radius) {
-  // radius = player body radius for AABB expansion
-  for (const c of colliders) {
-    const dx = wrapDelta(c.cx, nx);
-    const dz = wrapDelta(c.cz, nz);
-    if (Math.abs(dx) < c.hw + radius && Math.abs(dz) < c.hd + radius) return true;
-  }
-  return false;
-}
-
-function getGroundHeight(px, pz) {
-  for (const b of boardwalkZones) {
-    const dx = wrapDelta(b.cx, px);
-    const dz = wrapDelta(b.cz, pz);
-    if (Math.abs(dx) < b.hw && Math.abs(dz) < b.hd) return b.height;
-  }
-  return 0;
-}
+// Player/collision state moved up before building loop (needed for town init)
 
 // ============================================================
 // TWEAKS — Tab cycles selection, - / = adjusts, buttons also work
