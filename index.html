@@ -1037,8 +1037,8 @@ function makeWesternTown() {
     // Single interior light — placed near front/door so it illuminates both inside and doorway.
     // Large range to fill the room. Distance × 1.5 because town is scaled 1.5×.
     const _S = 1.5;
-    const iLight = new THREE.PointLight(0xFFCC88, 0, Math.max(w, d) * _S);
-    iLight.position.set(_dx, wH - 1, d * 0.15); // near front, below ceiling
+    const iLight = new THREE.PointLight(0xFFCC88, 0, Math.max(w, d) * _S, 1); // decay=1 for linear falloff
+    iLight.position.set(_dx, wH - 1, d * 0.15);
     g.add(iLight);
     _interiorLights.push(iLight);
 
@@ -1286,7 +1286,7 @@ function makeWesternTown() {
       _lanternGlasses.push(glass);
     }
     // Lantern point light
-    const light = new THREE.PointLight(0xFFAA55, 0, 50);
+    const light = new THREE.PointLight(0xFFAA55, 0, 50, 1); // decay=1
     light.position.set(lx, 8.5, lz);
     town.add(light);
     _interiorLights.push(light);
@@ -1633,7 +1633,7 @@ function applyContinuousTime(dt) {
   moonDirLight.castShadow = moonVis > 0.15;
 
   // Interior/exterior lights — on at dusk, off after sunrise
-  const _nightGlow = Math.max(0, 1.0 - sunFade) * 3.0;
+  const _nightGlow = Math.max(0, 1.0 - sunFade) * 5.0;
   for (const il of _interiorLights) il.intensity = _nightGlow;
   // Lantern glass emissive — warm glow when lit
   const _emissiveVal = Math.max(0, 1.0 - sunFade);
