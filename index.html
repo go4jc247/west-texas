@@ -332,13 +332,14 @@ scene.add(sunSprite);
   ctx.restore();
   window._moonTex = new THREE.CanvasTexture(c);
 })();
+// alphaTest puts the moon in the OPAQUE pass — it renders before stars and writes
+// to the depth buffer. Stars are in the transparent pass and fail the depth test
+// behind the moon, so they can never show through it.
 const moonSpriteMat = new THREE.SpriteMaterial({
-  map: window._moonTex, transparent: true, depthWrite: false,
-  // NormalBlending: disc is SOLID — blocks stars, shows real dark maria
+  map: window._moonTex, alphaTest: 0.08, depthWrite: true,
 });
 const moonSprite = new THREE.Sprite(moonSpriteMat);
 moonSprite.scale.set(700, 700, 1);
-moonSprite.renderOrder = 2;        // draw after stars so moon is always in front
 scene.add(moonSprite);
 
 // White additive glow — makes moon look like a bright white ball when high in sky.
@@ -357,7 +358,7 @@ scene.add(moonSprite);
 })();
 const moonGlowMat = new THREE.SpriteMaterial({
   map: window._moonGlowTex, transparent: true, opacity: 0,
-  blending: THREE.AdditiveBlending, depthWrite: false,
+  blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
 });
 const moonGlowSprite = new THREE.Sprite(moonGlowMat);
 moonGlowSprite.scale.set(820, 820, 1);
