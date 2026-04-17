@@ -268,7 +268,8 @@ scene.add(hemi);
 const skyGeo = new THREE.SphereGeometry(5500, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide,
-  depthWrite: false,  // sky dome is always farthest — never occlude stars
+  transparent: true,    // alpha-blend over stars behind the dome
+  depthWrite: false,    // sky dome never occludes anything
   uniforms: {
     topColor: { value: new THREE.Color(0x2255AA) },
     midColor: { value: new THREE.Color(0x66BBEE) },
@@ -353,14 +354,21 @@ const skyMat = new THREE.ShaderMaterial({
       float _mgPx = vMoonDiscPx * moonGlowMult;
       float mgn = _mDist / max(_mgPx, 1.0);
       col += moonGlowColor * exp(-mgn*mgn*0.5) * moonDiscIntensity * moonGlowIntensity * 0.25 * vMoonVis;
+      float moonSolid = 0.0; // tracks moon disc coverage for solid alpha
       float moonEdge = smoothstep(1.05, 0.94, mn);
       if (moonEdge > 0.0 && moonDiscIntensity > 0.001 && vMoonVis > 0.0) {
         vec2 moonOff = (gl_FragCoord.xy - vMoonPx) / vMoonDiscPx;
         vec2 moonUV = clamp(vec2(moonOff.x, -moonOff.y) * 0.5 + 0.5, 0.0, 1.0);
         vec4 mt = texture2D(moonTex, moonUV);
-        col = mix(col, mt.rgb * moonDiscColor, moonEdge * moonDiscIntensity * mt.a);
+        float mBlend = moonEdge * moonDiscIntensity * mt.a;
+        col = mix(col, mt.rgb * moonDiscColor, mBlend);
+        moonSolid = mBlend; // moon disc is solid — blocks stars
       }
-      gl_FragColor = vec4(col, 1.0);
+      // Alpha: sky brightness → opaque (hides stars by day), dark → transparent
+      // (stars show through at night). Moon disc forces alpha=1 (solid).
+      float skyLum = dot(col, vec3(0.299, 0.587, 0.114));
+      float skyAlpha = clamp(skyLum * 5.0, 0.0, 1.0);
+      gl_FragColor = vec4(col, max(skyAlpha, moonSolid));
     }`
 });
 const skyDome = new THREE.Mesh(skyGeo, skyMat);
@@ -369,7 +377,7 @@ scene.add(skyDome);
 // ============================================================
 // STARS — real constellations + Milky Way band, sidereal rotation
 // ============================================================
-const STAR_R = 5490;
+const STAR_R = 5600; // behind sky dome (5500) — stars are the farthest layer
 // Latitude tilt: Rx(-60°) puts celestial north pole 30° above north horizon (30°N lat)
 // cos(-60°)=0.5, sin(-60°)=-0.866
 const _sct = 0.5, _sst = -0.866;
