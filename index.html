@@ -570,13 +570,17 @@ scene.add(starGroup);
 (function buildSunSprite() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const ctx = c.getContext('2d');
-  // Outer glow
+  // Glow content is compressed into the inner 25% of the canvas radius.
+  // The outer 75% is fully transparent — when the GPU clips the plane at the
+  // viewport edge it only ever cuts through alpha=0 pixels, so no hard line appears.
+  // The plane is scaled 4× to compensate, keeping the same visual glow size.
   const g = ctx.createRadialGradient(128,128,0, 128,128,128);
-  g.addColorStop(0,   'rgba(255,255,220,1)');
-  g.addColorStop(0.12,'rgba(255,240,160,1)');
-  g.addColorStop(0.28,'rgba(255,200, 60,0.7)');
-  g.addColorStop(0.55,'rgba(255,140, 10,0.25)');
-  g.addColorStop(1,   'rgba(255,100,  0,0)');
+  g.addColorStop(0,    'rgba(255,255,220,1)');
+  g.addColorStop(0.03, 'rgba(255,240,160,1)');   // original 0.12 × 0.25
+  g.addColorStop(0.07, 'rgba(255,200, 60,0.7)'); // original 0.28 × 0.25
+  g.addColorStop(0.14, 'rgba(255,140, 10,0.25)');// original 0.55 × 0.25
+  g.addColorStop(0.25, 'rgba(255,100,  0,0)');   // fully transparent by 25%
+  g.addColorStop(1.0,  'rgba(255,100,  0,0)');   // outer 75% = zero
   ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
   window._sunTex = new THREE.CanvasTexture(c);
 })();
@@ -597,28 +601,31 @@ scene.add(camera);       // required for camera children to participate in the s
 // MOON SPRITE — full moon disc with craters
 // ============================================================
 (function buildMoonSprite() {
+  // Disc drawn at 25% of canvas radius (radius 32 on a 256px canvas).
+  // Plane is scaled 4× so visual disc size is identical to the old 100%-canvas approach.
+  // Outer 75% of canvas is transparent → GPU viewport clip never touches the disc.
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const ctx = c.getContext('2d');
-  // Clip to a circle so corners are always 100% transparent — no box possible
+  const DR = 32; // disc radius in canvas pixels (25% of half-canvas 128)
+  const S  = DR / 124; // scale factor vs original (for maria/crater coords)
   ctx.save();
-  ctx.beginPath(); ctx.arc(128,128,124,0,Math.PI*2); ctx.clip();
-  // Base disc: opaque cream-white with slight limb darkening — stays fully opaque
-  // to the clip boundary so the moon has a clean hard edge, not a feathered one.
-  const base = ctx.createRadialGradient(128,128,0, 128,128,124);
-  base.addColorStop(0,    'rgba(255,253,238,1)');  // bright center
-  base.addColorStop(0.60, 'rgba(245,242,220,1)');  // main body
-  base.addColorStop(0.85, 'rgba(215,210,185,1)');  // limb darkening
-  base.addColorStop(1.0,  'rgba(190,185,160,1)');  // stays opaque — clip() makes the circle
+  ctx.beginPath(); ctx.arc(128,128,DR,0,Math.PI*2); ctx.clip();
+  const base = ctx.createRadialGradient(128,128,0, 128,128,DR);
+  base.addColorStop(0,    'rgba(255,253,238,1)');
+  base.addColorStop(0.60, 'rgba(245,242,220,1)');
+  base.addColorStop(0.85, 'rgba(215,210,185,1)');
+  base.addColorStop(1.0,  'rgba(190,185,160,1)');
   ctx.fillStyle = base; ctx.fillRect(0,0,256,256);
-  // Maria (dark lunar seas) — drawn normally so they look like real dark patches
+  // Maria — positions scaled from original 124-radius layout to DR-radius
   ctx.globalAlpha = 0.28; ctx.fillStyle = '#6A6858';
   for (const [x,y,r] of [[110,90,38],[150,130,28],[90,145,22],[155,80,18]]) {
-    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(128+(x-128)*S, 128+(y-128)*S, r*S, 0, Math.PI*2); ctx.fill();
   }
-  // Brighter crater highlights
   ctx.globalAlpha = 0.18; ctx.fillStyle = '#F0EDD0';
   for (const [x,y,r] of [[85,80,12],[155,108,15],[95,145,9],[140,158,7],[115,115,18]]) {
-    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(128+(x-128)*S, 128+(y-128)*S, r*S, 0, Math.PI*2); ctx.fill();
   }
   ctx.restore();
   window._moonTex = new THREE.CanvasTexture(c);
@@ -635,12 +642,14 @@ const moonSpriteMat = new THREE.MeshBasicMaterial({
 new THREE.TextureLoader().load(
   './moon.jpg',  // local copy — no CORS issues
   tex => {
+    // Same 25%-radius layout as the procedural texture: disc at radius 256 on a 1024 canvas.
     const c2 = document.createElement('canvas'); c2.width = c2.height = 1024;
     const x2 = c2.getContext('2d');
     const img = tex.image;
+    const PR = 256; // photo disc radius = 25% of half-canvas (512)
     x2.save();
-    x2.beginPath(); x2.arc(512, 512, 508, 0, Math.PI * 2); x2.clip();
-    x2.drawImage(img, 0, 0, 1024, 1024);
+    x2.beginPath(); x2.arc(512, 512, PR, 0, Math.PI * 2); x2.clip();
+    x2.drawImage(img, 512 - PR, 512 - PR, PR * 2, PR * 2);
     x2.restore();
     const realTex = new THREE.CanvasTexture(c2);
     moonSpriteMat.map = realTex;
@@ -657,13 +666,15 @@ camera.add(moonSprite);  // camera child — no frustum clipping
 
 // Glow halo — billboard mesh, same pattern
 (function buildMoonGlow() {
+  // Glow content compressed to inner 25% — same transparent-border approach as sun/moon disc.
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const ctx = c.getContext('2d');
   const g = ctx.createRadialGradient(128,128,0, 128,128,128);
-  g.addColorStop(0,    'rgba(220,235,255,0.0)');
-  g.addColorStop(0.42, 'rgba(200,220,255,0.12)');
-  g.addColorStop(0.68, 'rgba(150,185,240,0.18)');
-  g.addColorStop(1.0,  'rgba(0,0,0,0)');
+  g.addColorStop(0,     'rgba(220,235,255,0.0)');
+  g.addColorStop(0.105, 'rgba(200,220,255,0.12)'); // original 0.42 × 0.25
+  g.addColorStop(0.17,  'rgba(150,185,240,0.18)'); // original 0.68 × 0.25
+  g.addColorStop(0.25,  'rgba(0,0,0,0)');           // fully transparent by 25%
+  g.addColorStop(1.0,   'rgba(0,0,0,0)');           // outer 75% = zero
   ctx.fillStyle = g; ctx.fillRect(0,0,256,256);
   window._moonGlowTex = new THREE.CanvasTexture(c);
 })();
@@ -1011,8 +1022,10 @@ function applyContinuousTime(dt) {
   const sunElevation = THREE.MathUtils.clamp(sunDir.y, 0, 1);
   sunSpriteMat.color.setHSL(0.08 - sunElevation * 0.08, 1 - sunElevation * 0.8, 1);
   sunSpriteMat.opacity = sunFade;
-  // Scale up when near horizon (atmospheric magnification)
-  const sunScale = 500 + (1 - sunElevation) * 300;
+  // Scale up when near horizon (atmospheric magnification).
+  // ×4 because glow content is compressed into center 25% of the canvas —
+  // same visual size, but 75% transparent border so viewport clips never show.
+  const sunScale = (500 + (1 - sunElevation) * 300) * 4;
   sunSprite.scale.set(sunScale, sunScale, 1);
 
   // Moon sprite — position now set in animate loop (camera-space child)
@@ -1022,9 +1035,9 @@ function applyContinuousTime(dt) {
   // moonVis = time-of-day window × horizon fade (fully slider-driven, replaces KMOON keyframe)
   const moonVis = moonTimeVis * moonFade;
 
-  // Size — driven by MOON_SIZE slider
-  moonSprite.scale.set(MOON_SIZE, MOON_SIZE, 1);
-  moonGlowSprite.scale.set(MOON_SIZE * MOON_GLOW_MULT, MOON_SIZE * MOON_GLOW_MULT, 1);
+  // Size — driven by MOON_SIZE slider. ×4 because disc/glow are in center 25% of canvas.
+  moonSprite.scale.set(MOON_SIZE * 4, MOON_SIZE * 4, 1);
+  moonGlowSprite.scale.set(MOON_SIZE * MOON_GLOW_MULT * 4, MOON_SIZE * MOON_GLOW_MULT * 4, 1);
 
   moonSpriteMat.opacity = moonVis;
   // MOON_BRIGHT is a pure exposure multiplier applied directly to the texture pixels.
@@ -1189,49 +1202,21 @@ function animate() {
   euler.y = -lookYaw;
   euler.x = skyView ? Math.PI / 2 : lookPitch; // sky view forces straight up
   camera.quaternion.setFromEuler(euler);
-  // Sun/moon billboards: position in camera space + fade out near viewport edge.
-  // GPU rasterization clips plane triangles with a hard straight line; fading to zero
-  // opacity before the disc reaches the edge makes the clip invisible.
+  // Sun/moon billboards: position in camera space. No fade needed — the textures have
+  // a 75% transparent border so the GPU viewport clip always hits alpha=0 pixels.
   {
-    const _invQ  = camera.quaternion.clone().invert();
-    // tan of half vertical/horizontal FOV — used to convert camera-space coords to NDC
-    const _tvFOV = Math.tan(camera.fov * Math.PI / 360);
-    const _thFOV = _tvFOV * camera.aspect;
-
-    // ── Sun ──────────────────────────────────────────────────────────────────
+    const _invQ = camera.quaternion.clone().invert();
+    // Sun
     const _sc = _lastSunDir.clone().applyQuaternion(_invQ);
-    if (_sc.z < 0) {                        // in front of camera
-      sunSprite.position.set(_sc.x*SKY_DIST, _sc.y*SKY_DIST, _sc.z*SKY_DIST);
-      // NDC position of sun centre (-1…1 range, 0 = screen centre)
-      const _snx = _sc.x / (-_sc.z) / _thFOV;
-      const _sny = _sc.y / (-_sc.z) / _tvFOV;
-      // Signed distance from disc edge to nearest viewport edge (positive = inside)
-      const _sedge = Math.min(1 - Math.abs(_snx), 1 - Math.abs(_sny));
-      const _sdisc = sunSprite.scale.x * 0.5 / SKY_DIST / _thFOV; // disc NDC radius
-      const _sfade = THREE.MathUtils.clamp((_sedge - _sdisc) / 0.12, 0, 1);
-      sunSprite.visible = _sfade > 0.001;
-      sunSpriteMat.opacity *= _sfade;       // applyContinuousTime set base; we scale it
-    } else {
-      sunSprite.visible = false;
-    }
-
-    // ── Moon + glow ──────────────────────────────────────────────────────────
+    sunSprite.visible = _sc.z < 0;
+    if (_sc.z < 0) sunSprite.position.set(_sc.x*SKY_DIST, _sc.y*SKY_DIST, _sc.z*SKY_DIST);
+    // Moon + glow
     const _mc = _lastMoonDir.clone().applyQuaternion(_invQ);
-    if (_mc.z < 0) {                        // in front of camera
+    moonSprite.visible    = _mc.z < 0;
+    moonGlowSprite.visible = _mc.z < 0;
+    if (_mc.z < 0) {
       moonSprite.position.set(_mc.x*SKY_DIST, _mc.y*SKY_DIST, _mc.z*SKY_DIST);
       moonGlowSprite.position.set(_mc.x*(SKY_DIST-10), _mc.y*(SKY_DIST-10), _mc.z*(SKY_DIST-10));
-      const _mnx = _mc.x / (-_mc.z) / _thFOV;
-      const _mny = _mc.y / (-_mc.z) / _tvFOV;
-      const _medge = Math.min(1 - Math.abs(_mnx), 1 - Math.abs(_mny));
-      const _mdisc = moonSprite.scale.x * 0.5 / SKY_DIST / _thFOV;
-      const _mfade = THREE.MathUtils.clamp((_medge - _mdisc) / 0.12, 0, 1);
-      moonSprite.visible = _mfade > 0.001;
-      moonGlowSprite.visible = _mfade > 0.001;
-      moonSpriteMat.opacity *= _mfade;
-      moonGlowMat.opacity   *= _mfade;
-    } else {
-      moonSprite.visible = false;
-      moonGlowSprite.visible = false;
     }
   }
 
