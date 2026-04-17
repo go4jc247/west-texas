@@ -82,6 +82,8 @@ canvas { display: block; }
   <div id="tr-mrise" ><span id="tc-mrise" style="color:#FFD700;width:10px;display:inline-block"> </span>Rise hr: <span id="tv-mrise">19.0</span> <button data-tw="mrise" data-d="-1">−</button><button data-tw="mrise" data-d="1">+</button></div>
   <div id="tr-mset"  ><span id="tc-mset"  style="color:#FFD700;width:10px;display:inline-block"> </span>Set hr: <span id="tv-mset">6.0</span> <button data-tw="mset"  data-d="-1">−</button><button data-tw="mset"  data-d="1">+</button></div>
   <div id="tr-mfade" ><span id="tc-mfade" style="color:#FFD700;width:10px;display:inline-block"> </span>Horiz fade: <span id="tv-mfade">4</span> <button data-tw="mfade" data-d="-1">−</button><button data-tw="mfade" data-d="1">+</button></div>
+  <div style="opacity:0.6;font-size:10px;margin:3px 0 2px">— Time —</div>
+  <div id="tr-syncclk"><span id="tc-syncclk" style="color:#FFD700;width:10px;display:inline-block"> </span>Real clock [C]: <span id="tv-syncclk">OFF</span> <button data-tw="syncclk" data-d="1">toggle</button></div>
   <div style="opacity:0.6;font-size:10px;margin:3px 0 2px">— Stars —</div>
   <div id="tr-sbright"><span id="tc-sbright" style="color:#FFD700;width:10px;display:inline-block"> </span>Brightness:  <span id="tv-sbright">1.0</span> <button data-tw="sbright" data-d="-1">−</button><button data-tw="sbright" data-d="1">+</button></div>
   <div id="tr-ssz"   ><span id="tc-ssz"    style="color:#FFD700;width:10px;display:inline-block"> </span>Star size:   <span id="tv-ssz">1.0</span> <button data-tw="ssz"    data-d="-1">−</button><button data-tw="ssz"    data-d="1">+</button></div>
@@ -133,6 +135,7 @@ function wrapDelta(a, b, W = WORLD_SIZE) {
 // ============================================================
 let timeOfDay = 10.0; // start mid-morning
 const TIME_SPEED = 1 / 60; // 1 game-hour per real minute → full day in 24 min
+let SYNC_CLOCK = false;    // when true, timeOfDay tracks the real wall clock
 
 // Sky keyframes — each row is one moment in the day.
 // Colors stored as hex ints; floats are scalars.
@@ -785,7 +788,7 @@ let skyView = false; // V key: overhead fisheye look at the full sky dome
 // ============================================================
 // TWEAKS — Tab cycles selection, - / = adjusts, buttons also work
 // ============================================================
-const TWEAK_LIST = ['turn','mouse','walk','run','night','moon','msize','mgsize','mgop','mrise','mset','mfade','sbright','ssz','sfsz','smwsz'];
+const TWEAK_LIST = ['turn','mouse','walk','run','night','moon','msize','mgsize','mgop','mrise','mset','mfade','syncclk','sbright','ssz','sfsz','smwsz'];
 let selectedTweakIdx = 5; // start on Moon Brightness
 
 function refreshTweaks() {
@@ -801,6 +804,7 @@ function refreshTweaks() {
   document.getElementById('tv-mrise').textContent  = MOON_RISE.toFixed(1);
   document.getElementById('tv-mset').textContent   = MOON_SET.toFixed(1);
   document.getElementById('tv-mfade').textContent   = MOON_FADE_ALT.toFixed(0);
+  document.getElementById('tv-syncclk').textContent = SYNC_CLOCK ? 'ON' : 'OFF';
   document.getElementById('tv-sbright').textContent = STAR_BRIGHT.toFixed(1);
   document.getElementById('tv-ssz').textContent     = STAR_NAMED_SIZE.toFixed(1);
   document.getElementById('tv-sfsz').textContent    = STAR_FIELD_SIZE.toFixed(1);
@@ -824,6 +828,7 @@ function adjustTweak(kind, dir) {
   if (kind === 'mrise')  MOON_RISE      = ((MOON_RISE      + dir * 0.5 + 24) % 24);
   if (kind === 'mset')   MOON_SET       = ((MOON_SET       + dir * 0.5 + 24) % 24);
   if (kind === 'mfade')  MOON_FADE_ALT   = Math.max(1,   MOON_FADE_ALT   + dir * 1);
+  if (kind === 'syncclk') SYNC_CLOCK = !SYNC_CLOCK;
   if (kind === 'sbright') STAR_BRIGHT    = Math.max(0,   STAR_BRIGHT     + dir * 0.1);
   if (kind === 'ssz')     STAR_NAMED_SIZE= Math.max(0.1, STAR_NAMED_SIZE + dir * 0.1);
   if (kind === 'sfsz')    STAR_FIELD_SIZE= Math.max(0.3, STAR_FIELD_SIZE + dir * 0.2);
@@ -846,6 +851,8 @@ document.addEventListener('keydown', e => {
   // = key (no shift needed) increases, - key decreases the selected param
   if (e.code === 'Equal')  { adjustTweak(TWEAK_LIST[selectedTweakIdx],  1); }
   if (e.code === 'Minus')  { adjustTweak(TWEAK_LIST[selectedTweakIdx], -1); }
+  // C: toggle real-clock sync
+  if (e.code === 'KeyC') { SYNC_CLOCK = !SYNC_CLOCK; refreshTweaks(); }
   // V: toggle overhead sky view — 140° FOV looking straight up
   if (e.code === 'KeyV') {
     skyView = !skyView;
@@ -1101,11 +1108,16 @@ let _wrapSkip = 0; // frames to skip render after a world-wrap (hides one-frame 
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.1);
-  // Advance time of day — hold + to fast-forward, hold - to rewind, else normal pace
+  // Advance time of day — hold + to fast-forward, hold - to rewind, else normal pace.
+  // When SYNC_CLOCK is on, read the wall clock instead of advancing the counter.
+  // Fast-forward/rewind keys temporarily override sync so you can still scrub time.
   if (keys['Equal'] || keys['NumpadAdd']) {
     timeOfDay = (timeOfDay + dt * TIME_SPEED * 60) % 24;
   } else if (keys['Minus'] || keys['NumpadSubtract']) {
     timeOfDay = (timeOfDay - dt * TIME_SPEED * 60 + 24) % 24;
+  } else if (SYNC_CLOCK) {
+    const _n = new Date();
+    timeOfDay = _n.getHours() + _n.getMinutes() / 60 + _n.getSeconds() / 3600;
   } else {
     timeOfDay = (timeOfDay + dt * TIME_SPEED) % 24;
   }
