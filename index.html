@@ -332,29 +332,31 @@ const skyMat = new THREE.ShaderMaterial({
     void main() {
       vec3 dir = normalize(vWorldDir);
       float h = dir.y;
-      vec3 col = mix(bottomColor, midColor, smoothstep(0.0, 0.15, h));
-      col = mix(col, topColor, smoothstep(0.15, 0.7, h));
-      // Horizon tint (angular — smooth gradient, distortion not visible)
+      // Base sky gradient from height
+      vec3 baseCol = mix(bottomColor, midColor, smoothstep(0.0, 0.15, h));
+      baseCol = mix(baseCol, topColor, smoothstep(0.15, 0.7, h));
+      // Horizon tint
       float sunDot = dot(normalize(vec3(dir.x, 0.0, dir.z)), normalize(vec3(sunDirection.x, 0.0, sunDirection.z)));
       vec3 hCol = mix(horizonFar, horizonNear, smoothstep(-0.3, 1.0, sunDot));
-      col = mix(col, hCol, smoothstep(0.15, 0.0, h) * smoothstep(-0.05, 0.02, h) * 0.8);
-      // Sky brightness radiates from the sun — brightest near it, dimmer far away.
-      // Uses angular distance in world space (not screen space).
-      float sAngWorld = acos(clamp(dot(dir, sunDirection), -1.0, 1.0));
-      float sunBright = 1.0 / (1.0 + sAngWorld * sAngWorld * 0.5);
-      col *= mix(1.0, 0.45 + 0.55 * sunBright, sunGlowIntensity);
-      // Capture base sky luminance BEFORE sun/moon disc glow for alpha calculation.
+      baseCol = mix(baseCol, hCol, smoothstep(0.15, 0.0, h) * smoothstep(-0.05, 0.02, h) * 0.8);
+
+      // Atmospheric scattering: sky brightness radiates FROM the sun.
+      // Near the sun the sky washes toward bright white; far away it's normal blue.
+      float sAngW = acos(clamp(dot(dir, sunDirection), -1.0, 1.0));
+      float scatter = 1.0 / (1.0 + sAngW * sAngW * 0.8);
+      // Blend toward white near sun + brighten
+      vec3 col = mix(baseCol, vec3(1.0, 0.98, 0.92), scatter * sunGlowIntensity * 0.55);
+      col *= 1.0 + scatter * sunGlowIntensity * 1.2;
+
+      // Alpha from base sky luminance (before sun disc, so no rings)
       float baseLum = dot(col, vec3(0.299, 0.587, 0.114));
 
-      // === SUN — screen-space for distortion-free circles ===
+      // === SUN DISC — screen-space, blazingly bright ===
       float _sDist = length(gl_FragCoord.xy - vSunPx);
-      float sn = _sDist / max(vSunDiscPx, 1.0); // 0=center, 1=disc edge
-      // Single smooth power-law glow — no banding, monotonic falloff
-      float sunGlow = 1.0 / (1.0 + sn * sn * 0.004);
-      col += sunGlowColor * sunGlow * sunGlowIntensity * 0.45 * vSunVis;
-      // Disc core (additive — always brightest point)
-      float discMask = smoothstep(1.1, 0.4, sn);
-      col += sunDiscColor * discMask * sunDiscIntensity * 1.5 * vSunVis;
+      float sn = _sDist / max(vSunDiscPx, 1.0);
+      // Bright disc core
+      float discMask = smoothstep(1.2, 0.3, sn);
+      col += sunDiscColor * discMask * sunDiscIntensity * 4.0 * vSunVis;
 
       // === MOON — screen-space ===
       float _mDist = length(gl_FragCoord.xy - vMoonPx);
