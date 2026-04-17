@@ -370,6 +370,29 @@ scene.add(sunSprite);
 const moonSpriteMat = new THREE.SpriteMaterial({
   map: window._moonTex, alphaTest: 0.08, depthWrite: true,
 });
+// Load a real moon photo from the Three.js CDN and swap it in once downloaded.
+// Falls back to the procedural canvas texture above if the load fails.
+new THREE.TextureLoader().load(
+  'https://threejs.org/examples/textures/planets/moon_1024.jpg',
+  tex => {
+    // The photo is a square JPEG — wrap it inside a clipped canvas circle so
+    // the sprite stays round and the alphaTest edge is clean.
+    const c2 = document.createElement('canvas'); c2.width = c2.height = 1024;
+    const x2 = c2.getContext('2d');
+    // Draw a white circle mask first so corners become transparent-via-alphaTest
+    const img = tex.image;
+    x2.save();
+    x2.beginPath(); x2.arc(512, 512, 508, 0, Math.PI * 2); x2.clip();
+    x2.drawImage(img, 0, 0, 1024, 1024);
+    x2.restore();
+    const realTex = new THREE.CanvasTexture(c2);
+    moonSpriteMat.map = realTex;
+    moonSpriteMat.needsUpdate = true;
+    tex.dispose(); // free the raw JPEG texture
+  },
+  undefined,
+  () => { /* fetch failed — keep procedural texture */ }
+);
 const moonSprite = new THREE.Sprite(moonSpriteMat);
 moonSprite.scale.set(700, 700, 1);
 scene.add(moonSprite);
@@ -393,11 +416,12 @@ scene.add(moonSprite);
 })();
 const moonGlowMat = new THREE.SpriteMaterial({
   map: window._moonGlowTex, transparent: true, opacity: 0,
-  blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
+  blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true,
+  // depthTest:true means mountains occlude the glow correctly when moon sets
 });
 const moonGlowSprite = new THREE.Sprite(moonGlowMat);
 moonGlowSprite.scale.set(820, 820, 1);
-moonGlowSprite.renderOrder = 1; // draw before moon disc so disc sits on top of halo
+moonGlowSprite.renderOrder = 1;
 scene.add(moonGlowSprite);
 
 // ============================================================
@@ -696,7 +720,12 @@ function applyContinuousTime(dt) {
     moonDir.y * SKY_DIST,
     player.z + moonDir.z * SKY_DIST
   );
-  moonGlowSprite.position.copy(moonSprite.position);
+  // Glow sits 10 units closer than the disc — avoids z-fighting while keeping depth correct
+  moonGlowSprite.position.set(
+    player.x + moonDir.x * (SKY_DIST - 10),
+    moonDir.y * (SKY_DIST - 10),
+    player.z + moonDir.z * (SKY_DIST - 10)
+  );
 
   // moonVis = time-of-day window × horizon fade (fully slider-driven, replaces KMOON keyframe)
   const moonVis = moonTimeVis * moonFade;
