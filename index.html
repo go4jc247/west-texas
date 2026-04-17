@@ -90,6 +90,9 @@ canvas { display: block; }
   <div id="tr-ssz"   ><span id="tc-ssz"    style="color:#FFD700;width:10px;display:inline-block"> </span>Star size:   <span id="tv-ssz">0.7</span> <button data-tw="ssz"    data-d="-1">−</button><button data-tw="ssz"    data-d="1">+</button></div>
   <div id="tr-sfsz"  ><span id="tc-sfsz"   style="color:#FFD700;width:10px;display:inline-block"> </span>Field size:  <span id="tv-sfsz">1.3</span> <button data-tw="sfsz"   data-d="-1">−</button><button data-tw="sfsz"   data-d="1">+</button></div>
   <div id="tr-smwsz" ><span id="tc-smwsz"  style="color:#FFD700;width:10px;display:inline-block"> </span>MW size:     <span id="tv-smwsz">1.1</span> <button data-tw="smwsz"  data-d="-1">−</button><button data-tw="smwsz"  data-d="1">+</button></div>
+  <div style="opacity:0.6;font-size:10px;margin:3px 0 2px">— Lighting —</div>
+  <div id="tr-lamp"  ><span id="tc-lamp"   style="color:#FFD700;width:10px;display:inline-block"> </span>Lamp posts:  <span id="tv-lamp">5.0</span> <button data-tw="lamp"   data-d="-1">−</button><button data-tw="lamp"   data-d="1">+</button></div>
+  <div id="tr-room"  ><span id="tc-room"   style="color:#FFD700;width:10px;display:inline-block"> </span>Room lights: <span id="tv-room">5.0</span> <button data-tw="room"   data-d="-1">−</button><button data-tw="room"   data-d="1">+</button></div>
 </div>
 
 <script type="importmap">
@@ -120,6 +123,8 @@ let STAR_BRIGHT     = 0.4; // opacity multiplier on top of keyframe value
 let STAR_NAMED_SIZE = 0.7; // size multiplier for named constellation stars (applied to 4.5/3.0/2.0 base)
 let STAR_FIELD_SIZE = 1.3; // pixel size for background field stars
 let STAR_MW_SIZE    = 1.1; // pixel size for Milky Way band stars
+let LAMP_BRIGHT     = 5.0; // lamp post / doorway lantern brightness
+let ROOM_BRIGHT     = 5.0; // interior room light brightness
 
 // Returns the shortest signed delta from a to b on a wrap of size W.
 // Result is in [-W/2, W/2].
@@ -954,7 +959,8 @@ function _makeSignTex(text, bg, fg, border) {
   return new THREE.CanvasTexture(c);
 }
 
-const _interiorLights = []; // filled by bldg()/town, updated in applyContinuousTime
+const _roomLights = [];    // interior building lights
+const _lampLights = [];    // lamp posts + doorway lanterns
 const _lanternGlasses = []; // emissive meshes for lantern glow
 
 function makeWesternTown() {
@@ -1040,7 +1046,7 @@ function makeWesternTown() {
     const iLight = new THREE.PointLight(0xFFCC88, 0, Math.max(w, d) * _S, 1); // decay=1 for linear falloff
     iLight.position.set(_dx, wH - 1, d * 0.15);
     g.add(iLight);
-    _interiorLights.push(iLight);
+    _roomLights.push(iLight);
 
     // Doorway lantern — visible iron housing + glowing glass above door
     const _doorLanternY = _doorBot + DOOR_H + 1.2;
@@ -1289,7 +1295,7 @@ function makeWesternTown() {
     const light = new THREE.PointLight(0xFFAA55, 0, 50, 1); // decay=1
     light.position.set(lx, 8.5, lz);
     town.add(light);
-    _interiorLights.push(light);
+    _lampLights.push(light);
     // Decorative base
     const base = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 0.5, 6), lampMat);
     base.position.set(lx, 0.25, lz);
@@ -1385,7 +1391,7 @@ for (const b of buildingPositions) {
 // ============================================================
 // TWEAKS — Tab cycles selection, - / = adjusts, buttons also work
 // ============================================================
-const TWEAK_LIST = ['turn','mouse','walk','run','night','moon','msize','mgsize','mgop','mrise','mset','mfade','syncclk','fftime','sbright','ssz','sfsz','smwsz'];
+const TWEAK_LIST = ['turn','mouse','walk','run','night','moon','msize','mgsize','mgop','mrise','mset','mfade','syncclk','fftime','sbright','ssz','sfsz','smwsz','lamp','room'];
 let selectedTweakIdx = 5; // start on Moon Brightness
 
 function refreshTweaks() {
@@ -1408,6 +1414,8 @@ function refreshTweaks() {
   document.getElementById('tv-ssz').textContent     = STAR_NAMED_SIZE.toFixed(1);
   document.getElementById('tv-sfsz').textContent    = STAR_FIELD_SIZE.toFixed(1);
   document.getElementById('tv-smwsz').textContent   = STAR_MW_SIZE.toFixed(1);
+  document.getElementById('tv-lamp').textContent    = LAMP_BRIGHT.toFixed(1);
+  document.getElementById('tv-room').textContent    = ROOM_BRIGHT.toFixed(1);
   // Update cursor indicators
   for (const key of TWEAK_LIST) {
     const el = document.getElementById('tc-' + key);
@@ -1433,6 +1441,8 @@ function adjustTweak(kind, dir) {
   if (kind === 'ssz')     STAR_NAMED_SIZE= Math.max(0.1, STAR_NAMED_SIZE + dir * 0.1);
   if (kind === 'sfsz')    STAR_FIELD_SIZE= Math.max(0.3, STAR_FIELD_SIZE + dir * 0.2);
   if (kind === 'smwsz')   STAR_MW_SIZE   = Math.max(0.3, STAR_MW_SIZE    + dir * 0.2);
+  if (kind === 'lamp')    LAMP_BRIGHT    = Math.max(0,   LAMP_BRIGHT     + dir * 1.0);
+  if (kind === 'room')    ROOM_BRIGHT    = Math.max(0,   ROOM_BRIGHT     + dir * 1.0);
   refreshTweaks();
 }
 
@@ -1632,9 +1642,10 @@ function applyContinuousTime(dt) {
   moonDirLight.intensity = moonVis * 1.2;
   moonDirLight.castShadow = moonVis > 0.15;
 
-  // Interior/exterior lights — on at dusk, off after sunrise
-  const _nightGlow = Math.max(0, 1.0 - sunFade) * 5.0;
-  for (const il of _interiorLights) il.intensity = _nightGlow;
+  // Town lights — on at dusk, off after sunrise. Separate sliders for lamps vs rooms.
+  const _nightFactor = Math.max(0, 1.0 - sunFade);
+  for (const il of _roomLights) il.intensity = _nightFactor * ROOM_BRIGHT;
+  for (const il of _lampLights) il.intensity = _nightFactor * LAMP_BRIGHT;
   // Lantern glass emissive — warm glow when lit
   const _emissiveVal = Math.max(0, 1.0 - sunFade);
   for (const lg of _lanternGlasses) {
