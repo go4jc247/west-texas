@@ -268,6 +268,7 @@ scene.add(hemi);
 const skyGeo = new THREE.SphereGeometry(5500, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide,
+  depthWrite: false,  // sky dome is always farthest — never occlude stars
   uniforms: {
     topColor: { value: new THREE.Color(0x2255AA) },
     midColor: { value: new THREE.Color(0x66BBEE) },
