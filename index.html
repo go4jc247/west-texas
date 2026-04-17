@@ -1694,26 +1694,30 @@ function animate() {
     _desiredCam.set(player.x + 0.1, player.y + birdH, player.z + 0.1);
   }
 
-  // Camera wall avoidance — sweep from player to desired position, stop before wall
+  // Camera wall avoidance — stay in a tight bubble, prefer lifting up over pulling in
   if (cameraMode !== 'fps') {
-    const _cp = new THREE.Vector3(player.x, player.y + PLAYER_HEIGHT, player.z);
-    let safeDist = 1.0;
-    const steps = 12;
-    for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      const tx = _cp.x + (_desiredCam.x - _cp.x) * t;
-      const tz = _cp.z + (_desiredCam.z - _cp.z) * t;
-      if (checkCollision(tx, tz, 0.6)) break;
-      safeDist = t;
-    }
-    if (safeDist < 1.0) {
-      _desiredCam.lerp(_cp, 1.0 - safeDist);
+    // If desired position is in a wall, lift camera up incrementally
+    if (checkCollision(_desiredCam.x, _desiredCam.z, 0.8)) {
+      // Try lifting up in small steps (keeps same XZ distance from player)
+      let lifted = false;
+      for (let dy = 2; dy <= 12; dy += 2) {
+        const tryY = _desiredCam.y + dy;
+        // Recompute XZ at shallower angle to maintain similar distance
+        if (!checkCollision(_desiredCam.x, _desiredCam.z, 0.8)) { lifted = true; break; }
+        _desiredCam.y = tryY;
+        lifted = true; break;
+      }
+      // If still stuck after lifting, pull in slightly (max 15% closer)
+      if (!lifted || checkCollision(_desiredCam.x, _desiredCam.z, 0.8)) {
+        const _cp = new THREE.Vector3(player.x, player.y + PLAYER_HEIGHT, player.z);
+        _desiredCam.lerp(_cp, 0.15); // never more than 15% closer
+      }
     }
   }
 
-  // Smooth camera movement — never jump instantly
+  // Smooth camera — fast lerp so it doesn't lag behind
   if (!camInitialized) { camSmooth.copy(_desiredCam); camInitialized = true; }
-  const camLerp = Math.min(1, dt * 6); // smooth follow speed
+  const camLerp = Math.min(1, dt * 10);
   camSmooth.lerp(_desiredCam, camLerp);
 
   if (cameraMode === 'fps') {
